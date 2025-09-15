@@ -120,7 +120,7 @@ The command `dotnet build src/Cassandra.sln` should succeed. Otherwise, you need
 You can build specific projects against specific target frameworks on any platform like this:
 
 ```bash
-dotnet build src/Cassandra/Cassandra.csproj -f netstandard2.0
+dotnet build src/Cassandra/Cassandra.csproj -f net8
 dotnet build src/Cassandra.Tests/Cassandra.Tests.csproj -f net8
 dotnet build src/Cassandra.IntegrationTests/Cassandra.IntegrationTests.csproj -f net8
 ```
