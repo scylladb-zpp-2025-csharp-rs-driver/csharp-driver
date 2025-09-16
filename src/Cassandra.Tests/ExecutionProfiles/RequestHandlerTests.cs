@@ -276,7 +276,7 @@ namespace Cassandra.Tests.ExecutionProfiles
             cluster.Connect();
 
             // create session
-            var session = new Session(cluster, config, null);
+            var session = cluster.ConnectAsync(null).ConfigureAwait(false).GetAwaiter().GetResult() as Session;
 
             // create request handler
             var options = profile != null
