@@ -32,8 +32,6 @@ namespace Cassandra
     /// </summary>
     public class DefaultLoadBalancingPolicy : ILoadBalancingPolicy
     {
-        private volatile Host _lastPreferredHost;
-
         /// <summary>
         /// Creates a new instance of <see cref="DefaultLoadBalancingPolicy"/> wrapping the provided child policy.
         /// </summary>
@@ -65,15 +63,17 @@ namespace Cassandra
         /// <returns>the HostDistance to <c>host</c>.</returns>
         public HostDistance Distance(Host host)
         {
-            var lastPreferredHost = _lastPreferredHost;
-            if (lastPreferredHost != null && host == lastPreferredHost)
-            {
-                // Set the last preferred host as local.
-                // It's somewhat "hacky" but ensures that the pool for the graph analytics host has the appropriate size
-                return HostDistance.Local;
-            }
+            // FIXME
+            // var lastPreferredHost = _lastPreferredHost;
+            // if (lastPreferredHost != null && host == lastPreferredHost)
+            // {
+            //     // Set the last preferred host as local.
+            //     // It's somewhat "hacky" but ensures that the pool for the graph analytics host has the appropriate size
+            //     return HostDistance.Local;
+            // }
 
-            return ChildPolicy.Distance(host);
+            // return ChildPolicy.Distance(host);
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -89,22 +89,14 @@ namespace Cassandra
         /// </summary>
         public IEnumerable<HostShard> NewQueryPlan(string keyspace, IStatement statement)
         {
-            if (statement is TargettedSimpleStatement targetedStatement && targetedStatement.PreferredHost != null)
-            {
-                _lastPreferredHost = targetedStatement.PreferredHost;
-                return YieldPreferred(keyspace, targetedStatement);
-            }
+            // FIXME
+            // if (statement is TargettedSimpleStatement targetedStatement && targetedStatement.PreferredHost != null)
+            // {
+            //     _lastPreferredHost = targetedStatement.PreferredHost;
+            // return YieldPreferred(keyspace, targetedStatement);
+            // }
 
             return ChildPolicy.NewQueryPlan(keyspace, statement);
-        }
-
-        private IEnumerable<HostShard> YieldPreferred(string keyspace, TargettedSimpleStatement statement)
-        {
-            yield return new HostShard(statement.PreferredHost, -1);
-            foreach (var h in ChildPolicy.NewQueryPlan(keyspace, statement))
-            {
-                yield return h;
-            }
         }
     }
 }

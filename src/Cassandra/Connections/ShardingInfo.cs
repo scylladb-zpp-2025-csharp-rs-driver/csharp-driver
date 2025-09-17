@@ -42,24 +42,6 @@ namespace Cassandra.Connections
             );
         }
 
-        internal int ShardID(IToken t)
-        {
-            long token = long.Parse(t.ToString());
-            token += long.MinValue;
-            token <<= (int)ScyllaShardingIgnoreMSB;
-
-            ulong tokLo = (ulong)(token & 0xFFFFFFFFL);
-            ulong tokHi = (ulong)((token >> 32) & 0xFFFFFFFFL);
-
-            ulong mul1 = tokLo * (ulong)ScyllaNrShards;
-            ulong mul2 = tokHi * (ulong)ScyllaNrShards; // logically shifted 32 bits
-
-            ulong sum = (mul1 >> 32) + mul2;
-
-            return (int)(sum >> 32);
-        }
-
-
         public override string ToString()
         {
             return $"ShardingInfo: " +

@@ -18,7 +18,6 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Cassandra.Connections;
-using Cassandra.Connections.Control;
 using NUnit.Framework;
 using Assert = NUnit.Framework.Legacy.ClassicAssert;
 

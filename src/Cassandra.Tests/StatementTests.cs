@@ -17,9 +17,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Cassandra.Requests;
 using Cassandra.Serialization;
-using Cassandra.SessionManagement;
 using Cassandra.Tests.ExecutionProfiles;
 using Moq;
 using NUnit.Framework;

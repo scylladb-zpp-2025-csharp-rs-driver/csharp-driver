@@ -19,24 +19,12 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Cassandra.Connections;
-using Cassandra.Connections.Control;
 using Cassandra.ExecutionProfiles;
 using Cassandra.Helpers;
-using Cassandra.MetadataHelpers;
 using Cassandra.Metrics;
 using Cassandra.Metrics.Abstractions;
-using Cassandra.Metrics.Providers.Null;
-using Cassandra.Observers;
-using Cassandra.Observers.Composite;
-using Cassandra.Observers.Metrics;
-using Cassandra.Observers.RequestTracker;
-using Cassandra.ProtocolEvents;
-using Cassandra.Requests;
 using Cassandra.Serialization;
-using Cassandra.SessionManagement;
 using Cassandra.Tasks;
-
-using Microsoft.IO;
 
 namespace Cassandra
 {
@@ -91,12 +79,6 @@ namespace Cassandra
         internal IAuthProvider AuthProvider { get; private set; } // Not exposed yet on purpose
 
         /// <summary>
-        ///  The authentication provider used to connect to the Cassandra cluster.
-        /// </summary>
-        /// <returns>the authentication provider in use.</returns>
-        internal IAuthInfoProvider AuthInfoProvider { get; private set; } // Not exposed yet on purpose
-
-        /// <summary>
         ///  The address translator used to translate Cassandra node address.
         /// </summary>
         /// <returns>the address translator in use.</returns>
@@ -115,67 +97,15 @@ namespace Cassandra
         public bool KeepContactPointsUnresolved { get; }
 
         /// <summary>
-        /// Shared reusable timer
-        /// </summary>
-        internal HashedWheelTimer Timer { get; private set; }
-
-        /// <summary>
-        /// Shared buffer pool
-        /// </summary>
-        internal RecyclableMemoryStreamManager BufferPool { get; private set; }
-
-        /// <summary>
         /// Gets or sets the list of <see cref="TypeSerializer{T}"/> defined.
         /// </summary>
         internal IEnumerable<ITypeSerializer> TypeSerializers { get; set; }
 
         internal MetadataSyncOptions MetadataSyncOptions { get; }
 
-        internal IStartupOptionsFactory StartupOptionsFactory { get; }
-
-        internal ISessionFactory SessionFactory { get; }
-
-        internal IRequestOptionsMapper RequestOptionsMapper { get; }
-
-        internal IRequestHandlerFactory RequestHandlerFactory { get; }
-
-        internal IHostConnectionPoolFactory HostConnectionPoolFactory { get; }
-
-        internal IRequestExecutionFactory RequestExecutionFactory { get; }
-
-        internal IConnectionFactory ConnectionFactory { get; }
-
-        internal IControlConnectionFactory ControlConnectionFactory { get; }
-
-        internal IPrepareHandlerFactory PrepareHandlerFactory { get; }
-
-        internal ITimerFactory TimerFactory { get; }
-
-        internal IEndPointResolver EndPointResolver { get; }
-
-        internal IDnsResolver DnsResolver { get; }
-
-        internal IMetadataRequestHandler MetadataRequestHandler { get; }
-
-        internal ITopologyRefresherFactory TopologyRefresherFactory { get; }
-
-        internal ISchemaParserFactory SchemaParserFactory { get; }
-
-        internal ISupportedOptionsInitializerFactory SupportedOptionsInitializerFactory { get; }
-
-        internal IProtocolVersionNegotiator ProtocolVersionNegotiator { get; }
-
-        internal IServerEventsSubscriber ServerEventsSubscriber { get; }
-
-        internal IDriverMetricsProvider MetricsProvider { get; }
-
-        internal DriverMetricsOptions MetricsOptions { get; }
-
         internal string SessionName { get; }
 
         internal bool MetricsEnabled { get; }
-
-        internal IObserverFactoryBuilder ObserverFactoryBuilder { get; }
 
         internal static string DefaultApplicationVersion => string.Empty;
 
@@ -221,11 +151,6 @@ namespace Cassandra
 
         internal IRequestOptions DefaultRequestOptions => RequestOptions[Configuration.DefaultExecutionProfileName];
 
-
-        internal IContactPointParser ContactPointParser { get; }
-
-        internal IServerNameResolver ServerNameResolver { get; }
-
         internal Configuration() :
             this(Policies.DefaultPolicies,
                  new ProtocolOptions(),
@@ -233,12 +158,9 @@ namespace Cassandra
                  new SocketOptions(),
                  new ClientOptions(),
                  NoneAuthProvider.Instance,
-                 null,
                  new QueryOptions(),
                  new DefaultAddressTranslator(),
                  new Dictionary<string, IExecutionProfile>(),
-                 null,
-                 null,
                  null,
                  null,
                  null,
@@ -264,12 +186,10 @@ namespace Cassandra
                                SocketOptions socketOptions,
                                ClientOptions clientOptions,
                                IAuthProvider authProvider,
-                               IAuthInfoProvider authInfoProvider,
                                QueryOptions queryOptions,
                                IAddressTranslator addressTranslator,
                                IReadOnlyDictionary<string, IExecutionProfile> executionProfiles,
                                MetadataSyncOptions metadataSyncOptions,
-                               IEndPointResolver endPointResolver,
                                IDriverMetricsProvider driverMetricsProvider,
                                DriverMetricsOptions metricsOptions,
                                string sessionName,
@@ -280,25 +200,6 @@ namespace Cassandra
                                TypeSerializerDefinitions typeSerializerDefinitions,
                                bool? keepContactPointsUnresolved,
                                bool? allowBetaProtocolVersions,
-                               ISessionFactory sessionFactory = null,
-                               IRequestOptionsMapper requestOptionsMapper = null,
-                               IStartupOptionsFactory startupOptionsFactory = null,
-                               IRequestHandlerFactory requestHandlerFactory = null,
-                               IHostConnectionPoolFactory hostConnectionPoolFactory = null,
-                               IRequestExecutionFactory requestExecutionFactory = null,
-                               IConnectionFactory connectionFactory = null,
-                               IControlConnectionFactory controlConnectionFactory = null,
-                               IPrepareHandlerFactory prepareHandlerFactory = null,
-                               ITimerFactory timerFactory = null,
-                               IContactPointParser contactPointParser = null,
-                               IServerNameResolver serverNameResolver = null,
-                               IDnsResolver dnsResolver = null,
-                               IMetadataRequestHandler metadataRequestHandler = null,
-                               ITopologyRefresherFactory topologyRefresherFactory = null,
-                               ISchemaParserFactory schemaParserFactory = null,
-                               ISupportedOptionsInitializerFactory supportedOptionsInitializerFactory = null,
-                               IProtocolVersionNegotiator protocolVersionNegotiator = null,
-                               IServerEventsSubscriber serverEventsSubscriber = null,
                                IRequestTracker requestTracker = null)
         {
             AddressTranslator = addressTranslator ?? throw new ArgumentNullException(nameof(addressTranslator));
@@ -315,87 +216,19 @@ namespace Cassandra
             SocketOptions = socketOptions;
             ClientOptions = clientOptions;
             AuthProvider = authProvider;
-            AuthInfoProvider = authInfoProvider;
-            StartupOptionsFactory = startupOptionsFactory ?? new StartupOptionsFactory(ClusterId, ApplicationVersion, ApplicationName);
-            SessionFactory = sessionFactory ?? new SessionFactory();
-            RequestOptionsMapper = requestOptionsMapper ?? new RequestOptionsMapper();
             MetadataSyncOptions = metadataSyncOptions?.Clone() ?? new MetadataSyncOptions();
-            DnsResolver = dnsResolver ?? new DnsResolver();
-            MetadataRequestHandler = metadataRequestHandler ?? new MetadataRequestHandler();
-            TopologyRefresherFactory = topologyRefresherFactory ?? new TopologyRefresherFactory();
-            SchemaParserFactory = schemaParserFactory ?? new SchemaParserFactory();
-            SupportedOptionsInitializerFactory = supportedOptionsInitializerFactory ?? new SupportedOptionsInitializerFactory();
-            ProtocolVersionNegotiator = protocolVersionNegotiator ?? new ProtocolVersionNegotiator();
-            ServerEventsSubscriber = serverEventsSubscriber ?? new ServerEventsSubscriber();
 
-            MetricsOptions = metricsOptions ?? new DriverMetricsOptions();
-            MetricsProvider = driverMetricsProvider ?? new NullDriverMetricsProvider();
             SessionName = sessionName;
             MetricsEnabled = driverMetricsProvider != null;
             TypeSerializers = typeSerializerDefinitions?.Definitions;
             KeepContactPointsUnresolved = keepContactPointsUnresolved ?? false;
             AllowBetaProtocolVersions = allowBetaProtocolVersions ?? false;
 
-            ObserverFactoryBuilder = new CompositeObserverFactoryBuilder(
-                new MetricsObserverFactoryBuilder(MetricsEnabled),
-                new RequestTrackerObserverFactoryBuilder(requestTracker));
-
-            RequestHandlerFactory = requestHandlerFactory ?? new RequestHandlerFactory();
-            HostConnectionPoolFactory = hostConnectionPoolFactory ?? new HostConnectionPoolFactory();
-            RequestExecutionFactory = requestExecutionFactory ?? new RequestExecutionFactory();
-            ConnectionFactory = connectionFactory ?? new ConnectionFactory();
-            ControlConnectionFactory = controlConnectionFactory ?? new ControlConnectionFactory();
-            PrepareHandlerFactory = prepareHandlerFactory ?? new PrepareHandlerFactory();
-            TimerFactory = timerFactory ?? new TaskBasedTimerFactory();
-
-            RequestOptions = RequestOptionsMapper.BuildRequestOptionsDictionary(executionProfiles, policies, socketOptions, clientOptions, queryOptions);
-            ExecutionProfiles = BuildExecutionProfilesDictionary(executionProfiles, RequestOptions);
+            // FIXME
+            // ExecutionProfiles = BuildExecutionProfilesDictionary(executionProfiles, RequestOptions);
+            ExecutionProfiles = null;
 
             MonitorReportingOptions = monitorReportingOptions ?? new MonitorReportingOptions();
-            ServerNameResolver = serverNameResolver ?? new ServerNameResolver(ProtocolOptions);
-            EndPointResolver = endPointResolver ?? new EndPointResolver(ServerNameResolver);
-            ContactPointParser = contactPointParser ?? new ContactPointParser(DnsResolver, ProtocolOptions, ServerNameResolver, KeepContactPointsUnresolved);
-
-            // Create the buffer pool with 16KB for small buffers and 256Kb for large buffers.
-            // The pool does not eagerly reserve the buffers, so it doesn't take unnecessary memory
-            // to create the instance.
-            BufferPool = new RecyclableMemoryStreamManager(16 * 1024, 256 * 1024, ProtocolOptions.MaximumFrameLength);
-            Timer = new HashedWheelTimer();
-        }
-
-        /// <summary>
-        /// Clones (shallow) the provided execution profile dictionary and add the default profile if not there yet.
-        /// </summary>
-        private IReadOnlyDictionary<string, IExecutionProfile> BuildExecutionProfilesDictionary(
-            IReadOnlyDictionary<string, IExecutionProfile> executionProfiles,
-            IReadOnlyDictionary<string, IRequestOptions> requestOptions)
-        {
-            var executionProfilesDictionary = executionProfiles.ToDictionary(profileKvp => profileKvp.Key, profileKvp => profileKvp.Value);
-            var defaultOptions = requestOptions[Configuration.DefaultExecutionProfileName];
-            executionProfilesDictionary[Configuration.DefaultExecutionProfileName] = new ExecutionProfile(defaultOptions);
-            return executionProfilesDictionary;
-        }
-
-        /// <summary>
-        /// Gets the pooling options. If not specified, creates a new instance with the default by protocol version.
-        /// This instance is not stored.
-        /// </summary>
-        internal PoolingOptions GetOrCreatePoolingOptions(ProtocolVersion protocolVersion)
-        {
-            return PoolingOptions ?? PoolingOptions.Create(protocolVersion);
-        }
-
-        internal int? GetHeartBeatInterval()
-        {
-            return PoolingOptions != null ? PoolingOptions.GetHeartBeatInterval() : PoolingOptions.Create().GetHeartBeatInterval();
-        }
-
-        /// <summary>
-        /// Sets the default consistency level.
-        /// </summary>
-        internal void SetDefaultConsistencyLevel(ConsistencyLevel consistencyLevel)
-        {
-            QueryOptions.SetDefaultConsistencyLevel(consistencyLevel);
         }
     }
 }

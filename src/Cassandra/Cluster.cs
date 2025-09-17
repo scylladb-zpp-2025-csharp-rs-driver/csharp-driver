@@ -26,58 +26,32 @@ using System.Threading.Tasks;
 
 using Cassandra.Collections;
 using Cassandra.Connections;
-using Cassandra.Connections.Control;
 using Cassandra.Helpers;
-using Cassandra.ProtocolEvents;
-using Cassandra.Requests;
 using Cassandra.Serialization;
-using Cassandra.SessionManagement;
 using Cassandra.Tasks;
 
 namespace Cassandra
 {
     /// <inheritdoc cref="ICluster" />
-    public class Cluster : IInternalCluster
+    public class Cluster : ICluster
     {
         private const string DefaultVersionString = "N/A";
         private const string DefaultProductString = "ScyllaDB C# Driver";
 
         private static ProtocolVersion _maxProtocolVersion = ProtocolVersion.MaxSupported;
         internal static readonly Logger Logger = new Logger(typeof(Cluster));
-        private readonly CopyOnWriteList<IInternalSession> _connectedSessions = new CopyOnWriteList<IInternalSession>();
-        private readonly IControlConnection _controlConnection;
-        private volatile bool _initialized;
-        private volatile Exception _initException;
-        private readonly SemaphoreSlim _initLock = new SemaphoreSlim(1, 1);
-        private long _sessionCounter = -1;
+        private readonly CopyOnWriteList<ISession> _connectedSessions = new CopyOnWriteList<ISession>();
 
         private readonly Metadata _metadata;
-        private readonly IProtocolEventDebouncer _protocolEventDebouncer;
-        private IReadOnlyList<ILoadBalancingPolicy> _loadBalancingPolicies;
 
+        // Disable unused event warnings, because they are part of the public API, so we can't remove them.
+#pragma warning disable CS0067
         /// <inheritdoc />
         public event Action<Host> HostAdded;
 
         /// <inheritdoc />
         public event Action<Host> HostRemoved;
-
-        internal IInternalCluster InternalRef => this;
-
-        /// <inheritdoc />
-        IControlConnection IInternalCluster.GetControlConnection()
-        {
-            return _controlConnection;
-        }
-
-        /// <inheritdoc />
-        IEnumerable<IInternalSession> IInternalCluster.GetConnectedSessions()
-        {
-            return _connectedSessions;
-        }
-
-        /// <inheritdoc />
-        ConcurrentDictionary<byte[], PreparedStatement> IInternalCluster.PreparedQueries { get; }
-            = new ConcurrentDictionary<byte[], PreparedStatement>(new ByteArrayComparer());
+#pragma warning restore CS0067
 
         /// <summary>
         ///  Build a new cluster based on the provided initializer. <p> Note that for
@@ -155,7 +129,7 @@ namespace Cassandra
         {
             get
             {
-                TaskHelper.WaitToComplete(Init());
+                // TaskHelper.WaitToComplete(Init()); FIXME
                 return _metadata;
             }
         }
@@ -171,205 +145,8 @@ namespace Cassandra
                 protocolVersion = Configuration.ProtocolOptions.MaxProtocolVersionValue.Value;
             }
 
-            _protocolEventDebouncer = new ProtocolEventDebouncer(
-                configuration.TimerFactory,
-                TimeSpan.FromMilliseconds(configuration.MetadataSyncOptions.RefreshSchemaDelayIncrement),
-                TimeSpan.FromMilliseconds(configuration.MetadataSyncOptions.MaxTotalRefreshSchemaDelay));
-
-            var parsedContactPoints = configuration.ContactPointParser.ParseContactPoints(contactPoints);
-
-            _controlConnection = configuration.ControlConnectionFactory.Create(
-                this,
-                _protocolEventDebouncer,
-                protocolVersion,
-                Configuration,
-                _metadata,
-                parsedContactPoints);
-
-            _metadata.ControlConnection = _controlConnection;
-        }
-
-        /// <summary>
-        /// Initializes once (Thread-safe) the control connection and metadata associated with the Cluster instance
-        /// </summary>
-        private async Task Init()
-        {
-            if (_initialized)
-            {
-                //It was already initialized
-                return;
-            }
-            await _initLock.WaitAsync().ConfigureAwait(false);
-            try
-            {
-                if (_initialized)
-                {
-                    //It was initialized when waiting on the lock
-                    return;
-                }
-                if (_initException != null)
-                {
-                    //There was an exception that is not possible to recover from
-                    throw _initException;
-                }
-                Cluster.Logger.Info("Connecting to cluster using {0}", GetAssemblyInfoString());
-                try
-                {
-                    await _metadata.Init().ConfigureAwait(false);
-                    // Collect all policies in collections
-                    var loadBalancingPolicies = new HashSet<ILoadBalancingPolicy>(new ReferenceEqualityComparer<ILoadBalancingPolicy>());
-                    var speculativeExecutionPolicies = new HashSet<ISpeculativeExecutionPolicy>(new ReferenceEqualityComparer<ISpeculativeExecutionPolicy>());
-                    foreach (var options in Configuration.RequestOptions.Values)
-                    {
-                        loadBalancingPolicies.Add(options.LoadBalancingPolicy);
-                        speculativeExecutionPolicies.Add(options.SpeculativeExecutionPolicy);
-                    }
-
-                    _loadBalancingPolicies = loadBalancingPolicies.ToList();
-
-                    // Only abort the async operations when at least twice the time for ConnectTimeout per host passed
-                    var initialAbortTimeout = Configuration.SocketOptions.ConnectTimeoutMillis * 2 * _metadata.Hosts.Count;
-                    initialAbortTimeout = Math.Max(initialAbortTimeout, Configuration.SocketOptions.MetadataAbortTimeout);
-                    var initTask = _controlConnection.InitAsync();
-                    try
-                    {
-                        await initTask.WaitToCompleteAsync(initialAbortTimeout).ConfigureAwait(false);
-                    }
-                    catch (TimeoutException ex)
-                    {
-                        var newEx = new TimeoutException(
-                            "Cluster initialization was aborted after timing out. This mechanism is put in place to" +
-                            " avoid blocking the calling thread forever. This usually caused by a networking issue" +
-                            " between the client driver instance and the cluster. You can increase this timeout via " +
-                            "the SocketOptions.ConnectTimeoutMillis config setting. This can also be related to deadlocks " +
-                            "caused by mixing synchronous and asynchronous code.", ex);
-                        _initException = new InitFatalErrorException(newEx);
-                        initTask.ContinueWith(t =>
-                        {
-                            if (t.IsFaulted && t.Exception != null)
-                            {
-                                _initException = new InitFatalErrorException(t.Exception.InnerException);
-                            }
-                        }, TaskContinuationOptions.ExecuteSynchronously).Forget();
-                        throw newEx;
-                    }
-
-                    // Initialize policies
-                    foreach (var lbp in loadBalancingPolicies)
-                    {
-                        lbp.Initialize(this);
-                    }
-
-                    foreach (var sep in speculativeExecutionPolicies)
-                    {
-                        sep.Initialize(this);
-                    }
-
-                    InitializeHostDistances();
-
-                    // Set metadata dependent options
-                    SetMetadataDependentOptions();
-                }
-                catch (NoHostAvailableException)
-                {
-                    //No host available now, maybe later it can recover from
-                    throw;
-                }
-                catch (TimeoutException)
-                {
-                    throw;
-                }
-                catch (Exception ex)
-                {
-                    //There was an error that the driver is not able to recover from
-                    //Store the exception for the following times
-                    _initException = new InitFatalErrorException(ex);
-                    //Throw the actual exception for the first time
-                    throw;
-                }
-                Cluster.Logger.Info("Cluster Connected using binary protocol version: [" + _controlConnection.Serializer.CurrentProtocolVersion + "]");
-                _initialized = true;
-                _metadata.Hosts.Added += OnHostAdded;
-                _metadata.Hosts.Removed += OnHostRemoved;
-                _metadata.Hosts.Up += OnHostUp;
-            }
-            finally
-            {
-                _initLock.Release();
-            }
-
-            Cluster.Logger.Info("Cluster #{0} [{1}] has been initialized.", GetHashCode(), Metadata.ClusterName);
-            return;
-        }
-
-        private void InitializeHostDistances()
-        {
-            foreach (var host in AllHosts())
-            {
-                InternalRef.RetrieveAndSetDistance(host);
-            }
-        }
-
-        private static string GetAssemblyInfoString()
-        {
-            try
-            {
-                var assembly = typeof(ISession).GetTypeInfo().Assembly;
-                var version = GetAssemblyVersion(assembly);
-                var product = GetAssemblyProduct(assembly);
-                return $"{product} v{version}";
-            }
-            catch (Exception ex)
-            {
-                Cluster.Logger.Verbose($"Could not retrieve driver name and version from assembly attributes: {ex.ToString()}");
-            }
-
-            return $"{DefaultProductString} v{DefaultVersionString}";
-        }
-
-        private static string GetAssemblyProduct(Assembly assembly)
-        {
-            var product = DefaultProductString;
-
-            var productAttribute = assembly.GetCustomAttributes(typeof(AssemblyProductAttribute)).FirstOrDefault();
-            if (productAttribute != null)
-            {
-                try
-                {
-                    product = ((AssemblyProductAttribute)productAttribute)?.Product ?? DefaultProductString;
-                }
-                catch (Exception ex)
-                {
-                    Cluster.Logger.Verbose($"Could not retrieve Product name from assembly custom attribute: {ex.ToString()}");
-                }
-            }
-
-            return product;
-        }
-
-        private static string GetAssemblyVersion(Assembly assembly)
-        {
-            var version = DefaultVersionString;
-
-            var assemblyInfoVersionAttribute = assembly.GetCustomAttributes(typeof(AssemblyInformationalVersionAttribute)).FirstOrDefault();
-            if (assemblyInfoVersionAttribute != null)
-            {
-                try
-                {
-                    version = ((AssemblyInformationalVersionAttribute)assemblyInfoVersionAttribute)?.InformationalVersion ?? DefaultVersionString;
-                }
-                catch (Exception ex)
-                {
-                    Cluster.Logger.Verbose($"Could not retrieve Driver version from assembly informational version attribute: {ex.ToString()}");
-                }
-            }
-
-            return version;
-        }
-
-        IReadOnlyDictionary<IContactPoint, IEnumerable<IConnectionEndPoint>> IInternalCluster.GetResolvedEndpoints()
-        {
-            return _metadata.ResolvedContactPoints;
+            // FIXME:
+            // var parsedContactPoints = configuration.ContactPointParser.ParseContactPoints(contactPoints);
         }
 
         /// <inheritdoc />
@@ -408,51 +185,13 @@ namespace Cassandra
         /// Creates a new session on this cluster and using a keyspace an existing keyspace.
         /// </summary>
         /// <param name="keyspace">Case-sensitive keyspace name to use</param>
-        public async Task<ISession> ConnectAsync(string keyspace)
+        public Task<ISession> ConnectAsync(string keyspace)
         {
-            await Init().ConfigureAwait(false);
-            var newSessionName = GetNewSessionName();
-            var session = await Configuration.SessionFactory.CreateSessionAsync(this, keyspace, _controlConnection.Serializer, newSessionName).ConfigureAwait(false);
-            try
-            {
-                await session.Init().ConfigureAwait(false);
-            }
-            catch
-            {
-                await session.ShutdownAsync().ConfigureAwait(false);
-                throw;
-            }
-            _connectedSessions.Add(session);
-            Cluster.Logger.Info("Session connected ({0})", session.GetHashCode());
-            return session;
-        }
-
-        private string GetNewSessionName()
-        {
-            var sessionCounter = GetAndIncrementSessionCounter();
-            if (sessionCounter == 0 && Configuration.SessionName != null)
-            {
-                return Configuration.SessionName;
-            }
-
-            var prefix = Configuration.SessionName ?? Configuration.DefaultSessionName;
-            return prefix + sessionCounter;
-        }
-
-        private long GetAndIncrementSessionCounter()
-        {
-            var newCounter = Interlocked.Increment(ref _sessionCounter);
-
-            // Math.Abs just to avoid negative counters if it overflows
-            return newCounter < 0 ? Math.Abs(newCounter) : newCounter;
-        }
-
-        private void SetMetadataDependentOptions()
-        {
-            if (_metadata.IsDbaas)
-            {
-                Configuration.SetDefaultConsistencyLevel(ConsistencyLevel.LocalQuorum);
-            }
+            // Task<ISession> session = null; // FIXME
+            // _connectedSessions.Add(session);
+            // Cluster.Logger.Info("Session connected ({0})", session.GetHashCode());
+            // return session;
+            throw new NotImplementedException("ConnectAsync is not yet implemented"); // FIXME: bridge with Rust.
         }
 
         /// <summary>
@@ -471,11 +210,6 @@ namespace Cassandra
             session.CreateKeyspaceIfNotExists(Configuration.ClientOptions.DefaultKeyspace, replication, durableWrites);
             session.ChangeKeyspace(Configuration.ClientOptions.DefaultKeyspace);
             return session;
-        }
-
-        bool IInternalCluster.AnyOpenConnections(Host host)
-        {
-            return _connectedSessions.Any(session => session.HasConnections(host));
         }
 
         public void Dispose()
@@ -501,36 +235,6 @@ namespace Cassandra
             return Metadata.GetReplicas(keyspace, partitionKey);
         }
 
-        private void OnHostRemoved(Host h)
-        {
-            HostRemoved?.Invoke(h);
-        }
-
-        private void OnHostAdded(Host h)
-        {
-            HostAdded?.Invoke(h);
-        }
-
-        private async void OnHostUp(Host h)
-        {
-            try
-            {
-                if (!Configuration.QueryOptions.IsReprepareOnUp())
-                {
-                    return;
-                }
-
-                // We should prepare all current queries on the host
-                await ReprepareAllQueries(h).ConfigureAwait(false);
-            }
-            catch (Exception ex)
-            {
-                Cluster.Logger.Error(
-                    "An exception was thrown when preparing all queries on a host ({0}) " +
-                    "that came UP:" + Environment.NewLine + "{1}", h?.Address?.ToString(), ex.ToString());
-            }
-        }
-
         /// <inheritdoc />
         public bool RefreshSchema(string keyspace = null, string table = null)
         {
@@ -552,16 +256,6 @@ namespace Cassandra
         /// <inheritdoc />
         public async Task ShutdownAsync(int timeoutMs = Timeout.Infinite)
         {
-            if (!_initialized)
-            {
-                _metadata.ShutDown(timeoutMs);
-                _controlConnection.Dispose();
-                await _protocolEventDebouncer.ShutdownAsync().ConfigureAwait(false);
-                Configuration.Timer.Dispose();
-                Cluster.Logger.Info("Cluster #{0} has been shut down.", GetHashCode());
-                return;
-            }
-
             var sessions = _connectedSessions.ClearAndGet();
             try
             {
@@ -582,16 +276,14 @@ namespace Cassandra
                 throw;
             }
             _metadata.ShutDown(timeoutMs);
-            _controlConnection.Dispose();
-            await _protocolEventDebouncer.ShutdownAsync().ConfigureAwait(false);
-            Configuration.Timer.Dispose();
 
             // Dispose policies
             var speculativeExecutionPolicies = new HashSet<ISpeculativeExecutionPolicy>(new ReferenceEqualityComparer<ISpeculativeExecutionPolicy>());
-            foreach (var options in Configuration.RequestOptions.Values)
-            {
-                speculativeExecutionPolicies.Add(options.SpeculativeExecutionPolicy);
-            }
+            // FIXME:
+            // foreach (var options in Configuration.RequestOptions.Values)
+            // {
+            //     speculativeExecutionPolicies.Add(options.SpeculativeExecutionPolicy);
+            // }
 
             foreach (var sep in speculativeExecutionPolicies)
             {
@@ -600,101 +292,6 @@ namespace Cassandra
 
             Cluster.Logger.Info("Cluster #{0} [{1}] has been shut down.", GetHashCode(), Metadata.ClusterName);
             return;
-        }
-
-        /// <inheritdoc />
-        HostDistance IInternalCluster.RetrieveAndSetDistance(Host host)
-        {
-            var distance = _loadBalancingPolicies[0].Distance(host);
-
-            for (var i = 1; i < _loadBalancingPolicies.Count; i++)
-            {
-                var lbp = _loadBalancingPolicies[i];
-                var lbpDistance = lbp.Distance(host);
-                if (lbpDistance < distance)
-                {
-                    distance = lbpDistance;
-                }
-            }
-
-            host.SetDistance(distance);
-            return distance;
-        }
-
-        /// <inheritdoc />
-        async Task<PreparedStatement> IInternalCluster.Prepare(
-            IInternalSession session, ISerializerManager serializerManager, InternalPrepareRequest request)
-        {
-            var lbp = session.Cluster.Configuration.DefaultRequestOptions.LoadBalancingPolicy;
-            var handler = InternalRef.Configuration.PrepareHandlerFactory.CreatePrepareHandler(serializerManager, this, session, request);
-            var ps = await handler.Prepare(request, session, lbp.NewQueryPlan(session.Keyspace, null).GetEnumerator()).ConfigureAwait(false);
-            var psAdded = InternalRef.PreparedQueries.GetOrAdd(ps.Id, ps);
-            if (ps != psAdded)
-            {
-                PrepareHandler.Logger.Warning("Re-preparing already prepared query is generally an anti-pattern and will likely " +
-                               "affect performance. Consider preparing the statement only once. Query='{0}'", ps.Cql);
-                ps = psAdded;
-            }
-
-            return ps;
-        }
-
-        /// <inheritdoc />
-        void IInternalCluster.RemoveSession(IInternalSession session)
-        {
-            _connectedSessions.Remove(session);
-        }
-
-        private async Task ReprepareAllQueries(Host host)
-        {
-            ICollection<PreparedStatement> preparedQueries = InternalRef.PreparedQueries.Values;
-            IEnumerable<IInternalSession> sessions = _connectedSessions;
-
-            if (preparedQueries.Count == 0)
-            {
-                return;
-            }
-
-            // Get the first pool for that host that has open connections
-            var pool = sessions.Select(s => s.GetExistingPool(host.Address)).Where(p => p != null).FirstOrDefault(p => p.HasConnections);
-            if (pool == null)
-            {
-                PrepareHandler.Logger.Info($"Not re-preparing queries on {host.Address} as there wasn't an open connection to the node.");
-                return;
-            }
-
-            PrepareHandler.Logger.Info($"Re-preparing {preparedQueries.Count} queries on {host.Address}");
-            var tasks = new List<Task>(preparedQueries.Count);
-            var handler = InternalRef.Configuration.PrepareHandlerFactory.CreateReprepareHandler();
-            var serializer = _metadata.ControlConnection.Serializer.GetCurrentSerializer();
-            using (var semaphore = new SemaphoreSlim(64, 64))
-            {
-                foreach (var ps in preparedQueries)
-                {
-                    var request = new InternalPrepareRequest(serializer, ps.Cql, ps.Keyspace, null);
-                    await semaphore.WaitAsync().ConfigureAwait(false);
-                    tasks.Add(Task.Run(() => handler.ReprepareOnSingleNodeAsync(
-                        new KeyValuePair<Host, IHostConnectionPool>(host, pool),
-                        ps,
-                        request,
-                        semaphore,
-                        true)));
-                }
-
-                try
-                {
-                    await Task.WhenAll(tasks).ConfigureAwait(false);
-                }
-                catch (Exception ex)
-                {
-                    PrepareHandler.Logger.Info(
-                        "There was an error when re-preparing queries on {0}. " +
-                        "The driver will re-prepare the queries individually the next time they are sent to this node. " +
-                        "Exception: {1}",
-                        host.Address,
-                        ex);
-                }
-            }
         }
     }
 }

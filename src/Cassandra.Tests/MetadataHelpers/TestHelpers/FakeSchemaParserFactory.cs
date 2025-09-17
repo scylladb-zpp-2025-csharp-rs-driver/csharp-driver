@@ -17,7 +17,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Cassandra.MetadataHelpers;
 
 namespace Cassandra.Tests.MetadataHelpers.TestHelpers
 {

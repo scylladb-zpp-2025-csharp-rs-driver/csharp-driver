@@ -15,12 +15,7 @@
 //
 
 using System;
-using System.Collections.Generic;
 using System.Net;
-using System.Threading;
-using Cassandra.Connections;
-using Cassandra.Connections.Control;
-using Cassandra.SessionManagement;
 
 namespace Cassandra
 {
@@ -30,37 +25,13 @@ namespace Cassandra
     public class Host : IEquatable<Host>
     {
         private static readonly Logger Logger = new Logger(typeof(Host));
-        private long _isUpNow = 1;
-        private int _distance = (int)HostDistance.Ignored;
-        private static readonly IReadOnlyCollection<string> WorkloadsDefault = new string[0];
-
-        /// <summary>
-        /// Event that gets raised when the host is set as DOWN (not available) by the driver, after being UP.
-        /// It provides the delay for the next reconnection attempt.
-        /// </summary>
-        internal event Action<Host> Down;
-
-        /// <summary>
-        /// Event that gets raised when the host is considered back UP (available for queries) by the driver.
-        /// </summary>
-        internal event Action<Host> Up;
-
-        /// <summary>
-        /// Event that gets raised when the host is being decommissioned from the cluster.
-        /// </summary>
-        internal event Action Remove;
-
-        /// <summary>
-        /// Event that gets raised when there is a change in the distance, perceived by the host.
-        /// </summary>
-        internal event Action<HostDistance, HostDistance> DistanceChanged;
 
         /// <summary>
         /// Determines if the host is UP for the driver
         /// </summary>
         public bool IsUp
         {
-            get { return Interlocked.Read(ref _isUpNow) == 1L; }
+            get { throw new NotImplementedException(); }
         }
 
         /// <summary>
@@ -81,11 +52,6 @@ namespace Cassandra
         /// Gets the node's host id.
         /// </summary>
         public Guid HostId { get; private set; }
-
-        /// <summary>
-        /// Tokens assigned to the host
-        /// </summary>
-        internal IEnumerable<string> Tokens { get; private set; }
 
         /// <summary>
         ///  Gets the name of the datacenter this host is part of. The returned
@@ -112,22 +78,12 @@ namespace Cassandra
         public Version CassandraVersion { get; private set; }
 
         /// <summary>
-        /// ContactPoint from which this endpoint was resolved. It is null if it was parsed from system tables.
-        /// </summary>
-        internal IContactPoint ContactPoint { get; }
-
-        /// <summary>
         /// Creates a new instance of <see cref="Host"/>.
         /// </summary>
         // ReSharper disable once UnusedParameter.Local : Part of the public API
-        public Host(IPEndPoint address, IReconnectionPolicy reconnectionPolicy) : this(address, contactPoint: null)
+        public Host(IPEndPoint address, IReconnectionPolicy reconnectionPolicy)
         {
-        }
-
-        internal Host(IPEndPoint address, IContactPoint contactPoint)
-        {
-            Address = address ?? throw new ArgumentNullException(nameof(address));
-            ContactPoint = contactPoint;
+            // FIXME
         }
 
         /// <summary>
@@ -136,14 +92,7 @@ namespace Cassandra
         /// </summary>
         public bool SetDown()
         {
-            var wasUp = Interlocked.CompareExchange(ref _isUpNow, 0, 1) == 1;
-            if (!wasUp)
-            {
-                return false;
-            }
-            Logger.Warning("Host {0} considered as DOWN.", Address);
-            Down?.Invoke(this);
-            return true;
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -151,49 +100,12 @@ namespace Cassandra
         /// </summary>
         public bool BringUpIfDown()
         {
-            var wasUp = Interlocked.CompareExchange(ref _isUpNow, 1, 0) == 1;
-            if (wasUp)
-            {
-                return false;
-            }
-            Logger.Info("Host {0} is now UP", Address);
-            Up?.Invoke(this);
-            return true;
+            throw new NotImplementedException();
         }
 
         public void SetAsRemoved()
         {
-            Logger.Info("Decommissioning node {0}", Address);
-            Interlocked.Exchange(ref _isUpNow, 0);
-            Remove?.Invoke();
-        }
-
-        /// <summary>
-        /// Sets datacenter, rack and other basic information of a host.
-        /// </summary>
-        internal void SetInfo(IRow row)
-        {
-            Datacenter = row.GetValue<string>("data_center");
-            Rack = row.GetValue<string>("rack");
-            Tokens = row.GetValue<IEnumerable<string>>("tokens") ?? new string[0];
-
-            if (row.ContainsColumn("release_version"))
-            {
-                var releaseVersion = row.GetValue<string>("release_version");
-                if (releaseVersion != null)
-                {
-                    CassandraVersion = Version.Parse(releaseVersion.Split('-')[0]);
-                }
-            }
-
-            if (row.ContainsColumn("host_id"))
-            {
-                var nullableHostId = row.GetValue<Guid?>("host_id");
-                if (nullableHostId.HasValue)
-                {
-                    HostId = nullableHostId.Value;
-                }
-            }
+            throw new NotImplementedException();
         }
 
         /// <summary>
@@ -219,27 +131,6 @@ namespace Cassandra
             if (ReferenceEquals(this, obj)) return true;
             if (obj.GetType() != this.GetType()) return false;
             return Equals((Host)obj);
-        }
-
-        /// <summary>
-        /// Updates the internal state representing the distance.
-        /// </summary>
-        internal void SetDistance(HostDistance distance)
-        {
-            var previousDistance = (HostDistance)Interlocked.Exchange(ref _distance, (int)distance);
-            if (previousDistance != distance && DistanceChanged != null)
-            {
-                DistanceChanged(previousDistance, distance);
-            }
-        }
-
-        /// <summary>
-        /// Testing purposes only. Use <see cref="IInternalCluster.RetrieveAndSetDistance"/> to retrieve distance in a safer way.
-        /// </summary>
-        /// <returns></returns>
-        internal HostDistance GetDistanceUnsafe()
-        {
-            return (HostDistance)Interlocked.CompareExchange(ref _distance, 0, 0);
         }
     }
 }

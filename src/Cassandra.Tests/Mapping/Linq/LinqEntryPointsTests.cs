@@ -14,7 +14,6 @@
 //   limitations under the License.
 //
 
-using Cassandra.Connections.Control;
 using Cassandra.Data.Linq;
 using Cassandra.Mapping;
 using Cassandra.Serialization;

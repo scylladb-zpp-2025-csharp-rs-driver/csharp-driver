@@ -16,7 +16,6 @@
 
 using System.Collections.Generic;
 using System.Linq;
-using Cassandra.Requests;
 using Cassandra.Serialization;
 
 namespace Cassandra
@@ -35,7 +34,6 @@ namespace Cassandra
         private volatile RoutingKey _routingKey;
         private string[] _routingNames;
         private volatile int[] _routingIndexes;
-        private volatile ResultMetadata _resultMetadata;
         private volatile bool _isLwt;
 
         /// <summary>
@@ -70,14 +68,6 @@ namespace Cassandra
         public RowSetMetadata Variables
         {
             get { return _variablesRowsMetadata; }
-        }
-
-        /// <summary>
-        ///  Gets metadata on the columns that will be returned for this prepared statement.
-        /// </summary>
-        internal ResultMetadata ResultMetadata
-        {
-            get { return _resultMetadata; }
         }
 
         /// <summary>
@@ -123,21 +113,15 @@ namespace Cassandra
             //Default constructor for client test and mocking frameworks
         }
 
-        internal PreparedStatement(RowSetMetadata variablesRowsMetadata, byte[] id, ResultMetadata resultMetadata, string cql,
+        internal PreparedStatement(RowSetMetadata variablesRowsMetadata, byte[] id, string cql,
                                    string keyspace, ISerializerManager serializer, bool isLwt)
         {
             _variablesRowsMetadata = variablesRowsMetadata;
-            _resultMetadata = resultMetadata;
             Id = id;
             Cql = cql;
             Keyspace = keyspace;
             _serializerManager = serializer;
             _isLwt = isLwt;
-        }
-
-        internal void UpdateResultMetadata(ResultMetadata resultMetadata)
-        {
-            _resultMetadata = resultMetadata;
         }
 
         /// <summary>

@@ -22,7 +22,6 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Cassandra.IntegrationTests.TestBase;
-using Cassandra.SessionManagement;
 using Cassandra.Tests;
 
 using NUnit.Framework;

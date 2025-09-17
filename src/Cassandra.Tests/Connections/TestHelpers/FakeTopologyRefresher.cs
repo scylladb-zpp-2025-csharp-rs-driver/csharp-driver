@@ -18,7 +18,6 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using Cassandra.Connections;
-using Cassandra.Connections.Control;
 using Cassandra.Serialization;
 
 namespace Cassandra.Tests.Connections.TestHelpers

@@ -17,7 +17,6 @@
 using System.Collections.Concurrent;
 using System.Threading.Tasks;
 
-using Cassandra.ProtocolEvents;
 
 using Moq;
 

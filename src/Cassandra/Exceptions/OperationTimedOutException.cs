@@ -30,10 +30,5 @@ namespace Cassandra
             base($"The host {address} did not reply before timeout {timeout}ms")
         {
         }
-
-        internal OperationTimedOutException(IConnectionEndPoint endPoint, int timeout) :
-            base($"The host {endPoint} did not reply before timeout {timeout}ms")
-        {
-        }
     }
 }

@@ -18,16 +18,12 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using Cassandra.Metrics.Internal;
-using Cassandra.SessionManagement;
 using Cassandra.Tasks;
 
 namespace Cassandra.Data.Linq
 {
     public abstract class Batch : Statement
     {
-        private readonly IMetricsManager _metricsManager;
-
         protected readonly ISession _session;
 
         protected BatchType _batchType;
@@ -50,7 +46,6 @@ namespace Cassandra.Data.Linq
         internal Batch(ISession session, BatchType batchType)
         {
             _session = session;
-            _metricsManager = (session as IInternalSession)?.MetricsManager;
             _batchType = batchType;
             QueryAbortTimeout = session.Cluster.Configuration.DefaultRequestOptions.QueryAbortTimeout;
         }
@@ -85,7 +80,7 @@ namespace Cassandra.Data.Linq
 
         public void Execute(string executionProfile)
         {
-            WaitToCompleteWithMetrics(InternalExecuteAsync(executionProfile), QueryAbortTimeout);
+            throw new NotImplementedException();
         }
 
         protected abstract Task<RowSet> InternalExecuteAsync();
@@ -124,11 +119,6 @@ namespace Cassandra.Data.Linq
                 default:
                     throw new ArgumentException();
             }
-        }
-
-        internal T WaitToCompleteWithMetrics<T>(Task<T> task, int timeout = Timeout.Infinite)
-        {
-            return TaskHelper.WaitToCompleteWithMetrics(_metricsManager, task, timeout);
         }
     }
 }

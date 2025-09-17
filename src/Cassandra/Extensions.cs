@@ -14,10 +14,10 @@
 //   limitations under the License.
 //
 
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using Cassandra.SessionManagement;
 
 namespace Cassandra
 {
@@ -40,13 +40,7 @@ namespace Cassandra
         /// <returns></returns>
         public static ISessionState GetState(this ISession instance)
         {
-            var session = instance as IInternalSession;
-            return session == null ? SessionState.Empty() : SessionState.From(session);
-        }
-
-        internal static ISessionState GetState(this IInternalSession instance)
-        {
-            return SessionState.From(instance);
+            throw new NotImplementedException();
         }
 
         /// <summary>

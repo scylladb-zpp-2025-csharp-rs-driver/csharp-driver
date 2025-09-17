@@ -21,14 +21,9 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using Cassandra.Collections;
 using Cassandra.Connections;
 using Cassandra.Metrics;
-using Cassandra.Metrics.Internal;
 using Cassandra.Metrics.Providers.Null;
-using Cassandra.Observers.Metrics;
-using Cassandra.Observers.Null;
-using Cassandra.Requests;
 using Cassandra.Serialization;
 using Cassandra.Tasks;
 

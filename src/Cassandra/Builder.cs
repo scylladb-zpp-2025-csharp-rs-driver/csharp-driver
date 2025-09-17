@@ -22,7 +22,6 @@ using System.Security.Authentication;
 using System.Security.Cryptography.X509Certificates;
 using System.Threading.Tasks;
 using Cassandra.Connections;
-using Cassandra.Connections.Control;
 using Cassandra.ExecutionProfiles;
 using Cassandra.Metrics;
 using Cassandra.Metrics.Abstractions;
@@ -43,7 +42,6 @@ namespace Cassandra
         private const int DefaultQueryAbortTimeout = 20000;
         private PoolingOptions _poolingOptions;
         private SocketOptions _socketOptions = new SocketOptions();
-        private IAuthInfoProvider _authInfoProvider;
         private IAuthProvider _authProvider = NoneAuthProvider.Instance;
         private CompressionType _compression = CompressionType.NoCompression;
         private IFrameCompressor _customCompressor;
@@ -67,7 +65,6 @@ namespace Cassandra
         private int _maxSchemaAgreementWaitSeconds = ProtocolOptions.DefaultMaxSchemaAgreementWaitSeconds;
         private IReadOnlyDictionary<string, IExecutionProfile> _profiles = new Dictionary<string, IExecutionProfile>();
         private MetadataSyncOptions _metadataSyncOptions;
-        private IEndPointResolver _endPointResolver;
         private IDriverMetricsProvider _driverMetricsProvider;
         private IRequestTracker _requestTracker;
         private DriverMetricsOptions _metricsOptions;
@@ -170,12 +167,10 @@ namespace Cassandra
                 _socketOptions,
                 clientOptions,
                 _authProvider,
-                _authInfoProvider,
                 _queryOptions,
                 _addressTranslator,
                 _profiles,
                 _metadataSyncOptions,
-                _endPointResolver,
                 _driverMetricsProvider,
                 _metricsOptions,
                 _sessionName,
@@ -666,7 +661,6 @@ namespace Cassandra
         /// <returns>this Builder</returns>
         public Builder WithCredentials(String username, String password)
         {
-            _authInfoProvider = new SimpleAuthInfoProvider().Add("username", username).Add("password", password);
             _authProvider = new PlainTextAuthProvider(username, password);
             return this;
         }
@@ -873,12 +867,6 @@ namespace Cassandra
             }
 
             _typeSerializerDefinitions = definitions ?? throw new ArgumentNullException(nameof(definitions));
-            return this;
-        }
-
-        internal Builder WithEndPointResolver(IEndPointResolver endPointResolver)
-        {
-            _endPointResolver = endPointResolver ?? throw new ArgumentNullException(nameof(endPointResolver));
             return this;
         }
 

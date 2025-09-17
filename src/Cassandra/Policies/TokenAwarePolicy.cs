@@ -82,64 +82,7 @@ namespace Cassandra
         /// <returns>the new query plan.</returns>
         public IEnumerable<HostShard> NewQueryPlan(string loggedKeyspace, IStatement query)
         {
-            var routingKey = query?.RoutingKey;
-            IEnumerable<HostShard> childIterator;
-            if (routingKey == null)
-            {
-                childIterator = ChildPolicy.NewQueryPlan(loggedKeyspace, query);
-                foreach (var h in childIterator)
-                {
-                    yield return h;
-                }
-                yield break;
-            }
-
-            var keyspace = query.Keyspace ?? loggedKeyspace;
-            var table = query.TableName;
-            IEnumerable<HostShard> replicas = null;
-            if (table != null)
-            {
-                var token = _cluster.Metadata.GetTokenFactory().Hash(routingKey.RawRoutingKey);
-                replicas = _cluster.Metadata.TabletMap.GetReplicas(keyspace, table, token);
-            }
-            if (replicas == null || !replicas.Any())
-            {
-                replicas = _cluster.GetReplicas(keyspace, routingKey.RawRoutingKey);
-            }
-
-            var localReplicaSet = new HashSet<HostShard>();
-            var localReplicaList = new List<HostShard>(replicas.Count());
-            // We can't do it lazily as we need to balance the load between local replicas
-            foreach (var localReplica in replicas.Where(hs => ChildPolicy.Distance(hs.Host) == HostDistance.Local))
-            {
-                localReplicaSet.Add(localReplica);
-                localReplicaList.Add(localReplica);
-            }
-            // Return the local replicas first
-            if (localReplicaList.Count > 0)
-            {
-                var startIndex = 0;
-                // Use a pseudo random start index if query is not LWT
-                if (query?.IsLwt() != true)
-                {
-                    startIndex = _prng.Value.Next();
-                }
-                for (var i = 0; i < localReplicaList.Count; i++)
-                {
-                    yield return localReplicaList[(startIndex + i) % localReplicaList.Count];
-                }
-            }
-
-            // Then, return the rest of child policy hosts
-            childIterator = ChildPolicy.NewQueryPlan(loggedKeyspace, query);
-            foreach (var h in childIterator)
-            {
-                if (localReplicaSet.Contains(h))
-                {
-                    continue;
-                }
-                yield return h;
-            }
+            throw new NotImplementedException();
         }
     }
 }

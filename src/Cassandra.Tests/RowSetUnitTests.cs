@@ -27,7 +27,6 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Reflection;
-using Cassandra.Metrics.Internal;
 using Moq;
 
 namespace Cassandra.Tests

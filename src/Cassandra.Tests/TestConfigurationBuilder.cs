@@ -17,17 +17,10 @@
 using System;
 using System.Collections.Generic;
 using Cassandra.Connections;
-using Cassandra.Connections.Control;
 using Cassandra.ExecutionProfiles;
-using Cassandra.MetadataHelpers;
 using Cassandra.Metrics;
 using Cassandra.Metrics.Providers.Null;
-using Cassandra.Observers;
-using Cassandra.Observers.Metrics;
-using Cassandra.ProtocolEvents;
-using Cassandra.Requests;
 using Cassandra.Serialization;
-using Cassandra.SessionManagement;
 
 namespace Cassandra.Tests
 {

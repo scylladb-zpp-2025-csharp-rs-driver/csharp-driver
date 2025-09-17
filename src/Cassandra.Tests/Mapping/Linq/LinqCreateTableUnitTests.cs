@@ -16,7 +16,6 @@
 using System.Collections.Generic;
 using System.Globalization;
 using System.Threading;
-using Cassandra.Connections.Control;
 using Cassandra.Data.Linq;
 using Cassandra.Mapping;
 using Cassandra.Serialization;
