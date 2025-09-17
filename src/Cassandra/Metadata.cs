@@ -56,7 +56,8 @@ namespace Cassandra
 
         internal Metadata(Configuration configuration)
         {
-            throw new NotImplementedException();
+            // FIXME:
+            // throw new NotImplementedException();
         }
 
         public void Dispose()
