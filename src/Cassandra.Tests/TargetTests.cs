@@ -26,14 +26,13 @@ namespace Cassandra.Tests
     {
 #if NETCOREAPP
         [Test]
-        public void Should_TargetNetstandard15_When_TestsTargetNetcore20()
+        public void Should_TargetNetcore()
         {
             var framework = Assembly
                             .GetAssembly(typeof(ISession))?
                             .GetCustomAttribute<TargetFrameworkAttribute>()?
                             .FrameworkName;
-
-            Assert.AreEqual(".NETStandard,Version=v2.0", framework);
+            Assert.IsTrue(framework?.StartsWith(".NETCoreApp,Version="));
         }
 #else
         [Test]
