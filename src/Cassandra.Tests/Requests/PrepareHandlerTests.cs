@@ -22,7 +22,6 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Cassandra.Connections;
 using Cassandra.Serialization;
 using Cassandra.Tests.Connections.TestHelpers;
 using Moq;

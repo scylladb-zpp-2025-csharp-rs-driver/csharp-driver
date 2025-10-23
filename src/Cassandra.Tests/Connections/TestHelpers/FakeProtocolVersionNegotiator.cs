@@ -15,7 +15,6 @@
 //
 
 using System.Threading.Tasks;
-using Cassandra.Connections;
 using Cassandra.Serialization;
 
 namespace Cassandra.Tests.Connections.TestHelpers

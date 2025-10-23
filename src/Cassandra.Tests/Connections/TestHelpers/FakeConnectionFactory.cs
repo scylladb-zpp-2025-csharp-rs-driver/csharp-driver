@@ -17,7 +17,6 @@
 using System;
 using System.Collections.Concurrent;
 using System.Net;
-using Cassandra.Connections;
 using Cassandra.Serialization;
 using Moq;
 

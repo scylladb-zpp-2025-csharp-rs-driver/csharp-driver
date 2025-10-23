@@ -19,7 +19,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
-using Cassandra.Connections;
 using Cassandra.Serialization;
 using Cassandra.Tests.Connections.TestHelpers;
 using Moq;

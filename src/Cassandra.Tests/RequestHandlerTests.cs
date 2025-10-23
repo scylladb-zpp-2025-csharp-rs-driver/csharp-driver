@@ -18,7 +18,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Cassandra.Connections;
 using Cassandra.ExecutionProfiles;
 using Cassandra.Serialization;
 

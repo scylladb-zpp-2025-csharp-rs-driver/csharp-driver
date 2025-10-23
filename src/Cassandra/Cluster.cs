@@ -25,7 +25,6 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Cassandra.Collections;
-using Cassandra.Connections;
 using Cassandra.Helpers;
 using Cassandra.Serialization;
 using Cassandra.Tasks;

@@ -15,7 +15,6 @@
 // 
 
 using System.Net;
-using Cassandra.Connections;
 
 namespace Cassandra
 {

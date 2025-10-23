@@ -14,7 +14,6 @@
 //    limitations under the License.
 
 using System.Threading.Tasks;
-using Cassandra.Connections;
 using Cassandra.Tasks;
 
 namespace Cassandra.Tests.Connections.TestHelpers

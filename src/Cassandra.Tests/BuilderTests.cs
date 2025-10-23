@@ -17,7 +17,6 @@
 using System;
 using System.Linq;
 using System.Net;
-using Cassandra.Connections;
 using NUnit.Framework;
 using Assert = NUnit.Framework.Legacy.ClassicAssert;
 using CollectionAssert = NUnit.Framework.Legacy.CollectionAssert;

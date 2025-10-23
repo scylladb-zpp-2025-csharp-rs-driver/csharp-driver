@@ -21,7 +21,6 @@ using System.Linq;
 using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
-using Cassandra.Connections;
 using Cassandra.Serialization;
 using Moq;
 using NUnit.Framework;

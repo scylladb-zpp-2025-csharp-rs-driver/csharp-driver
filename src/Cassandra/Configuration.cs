@@ -18,7 +18,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 
-using Cassandra.Connections;
 using Cassandra.ExecutionProfiles;
 using Cassandra.Helpers;
 using Cassandra.Metrics;

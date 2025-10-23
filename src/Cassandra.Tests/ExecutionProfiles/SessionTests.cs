@@ -17,7 +17,6 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 
-using Cassandra.Connections;
 using Cassandra.ExecutionProfiles;
 using Cassandra.Serialization;
 using Moq;
