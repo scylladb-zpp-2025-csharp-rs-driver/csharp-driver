@@ -17,7 +17,6 @@
 using System.Net;
 using System.Threading.Tasks;
 
-using Cassandra.Connections;
 
 using NUnit.Framework;
 using Assert = NUnit.Framework.Legacy.ClassicAssert;

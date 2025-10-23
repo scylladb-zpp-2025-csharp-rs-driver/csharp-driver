@@ -19,7 +19,6 @@ using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading.Tasks;
 using Cassandra.Serialization;
-using Cassandra.SessionManagement;
 using Cassandra.Tasks;
 
 namespace Cassandra
@@ -30,14 +29,12 @@ namespace Cassandra
     public class UdtMappingDefinitions
     {
         private readonly ConcurrentDictionary<Type, UdtMap> _udtByNetType;
-        private readonly IInternalCluster _cluster;
-        private readonly IInternalSession _session;
+        private readonly Session _session;
         private readonly ISerializerManager _serializer;
 
-        internal UdtMappingDefinitions(IInternalSession session, ISerializerManager serializer)
+        internal UdtMappingDefinitions(Session session, ISerializerManager serializer)
         {
             _udtByNetType = new ConcurrentDictionary<Type, UdtMap>();
-            _cluster = session.InternalCluster;
             _session = session;
             _serializer = serializer;
         }
@@ -48,7 +45,7 @@ namespace Cassandra
         /// <exception cref="ArgumentException" />
         public void Define(params UdtMap[] udtMaps)
         {
-            TaskHelper.WaitToComplete(DefineAsync(udtMaps), _cluster.Configuration.DefaultRequestOptions.QueryAbortTimeout);
+            TaskHelper.WaitToComplete(DefineAsync(udtMaps), _session.Configuration.DefaultRequestOptions.QueryAbortTimeout);
         }
 
         /// <summary>
@@ -87,7 +84,7 @@ namespace Cassandra
         /// Gets the definition and validates the fields
         /// </summary>
         /// <exception cref="InvalidTypeException" />
-        private async Task<UdtColumnInfo> GetDefinitionAsync(string keyspace, UdtMap map)
+        private Task<UdtColumnInfo> GetDefinitionAsync(string keyspace, UdtMap map)
         {
             var caseSensitiveUdtName = map.UdtName;
             if (map.IgnoreCase)
@@ -95,12 +92,15 @@ namespace Cassandra
                 //identifiers are lower cased in Cassandra
                 caseSensitiveUdtName = caseSensitiveUdtName.ToLowerInvariant();
             }
-            var udtDefinition = await _cluster.Metadata.GetUdtDefinitionAsync(keyspace, caseSensitiveUdtName).ConfigureAwait(false);
-            if (udtDefinition == null)
-            {
-                throw new InvalidTypeException($"{caseSensitiveUdtName} UDT not found on keyspace {keyspace}");
-            }
-            return udtDefinition;
+
+            // FIXME: Implement UDT metadata fetching from Rust driver.
+            // var udtDefinition = await _cluster.Metadata.GetUdtDefinitionAsync(keyspace, caseSensitiveUdtName).ConfigureAwait(false);
+            // if (udtDefinition == null)
+            // {
+            // throw new InvalidTypeException($"{caseSensitiveUdtName} UDT not found on keyspace {keyspace}");
+            // }
+            // return udtDefinition;
+            throw new NotImplementedException("GetDefinitionAsync is not yet implemented"); // FIXME: bridge with Rust UDT metadata fetching.
         }
 
         internal UdtMap GetUdtMap<T>(string keyspace)

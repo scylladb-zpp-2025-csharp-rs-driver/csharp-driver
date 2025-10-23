@@ -16,7 +16,6 @@
 
 using System;
 using System.IO;
-using Cassandra.Responses;
 using Cassandra.Serialization;
 using NUnit.Framework;
 using Assert = NUnit.Framework.Legacy.ClassicAssert;

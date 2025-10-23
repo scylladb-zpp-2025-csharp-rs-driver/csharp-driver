@@ -15,7 +15,6 @@
 
 using System.Collections.Generic;
 using System.Net;
-using Cassandra.Connections.Control;
 
 namespace Cassandra.Tests.Connections.TestHelpers
 {

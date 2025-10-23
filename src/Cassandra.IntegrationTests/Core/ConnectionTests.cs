@@ -28,16 +28,11 @@ using System.Net;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
-using Cassandra.Collections;
-using Cassandra.Connections;
 using Cassandra.IntegrationTests.SimulacronAPI.Models.Logs;
 using Cassandra.IntegrationTests.TestBase;
 using Cassandra.IntegrationTests.TestClusterManagement.Simulacron;
-using Cassandra.Observers.Null;
 using Cassandra.Tasks;
 using Cassandra.Tests;
-using Cassandra.Requests;
-using Cassandra.Responses;
 using Cassandra.Serialization;
 
 using Moq;

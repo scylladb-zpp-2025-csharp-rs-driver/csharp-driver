@@ -15,7 +15,6 @@
 //
 
 using System.Collections.Concurrent;
-using Cassandra.Requests;
 
 namespace Cassandra
 {
@@ -33,11 +32,6 @@ namespace Cassandra
         internal SessionRequestInfo(IStatement statement, string sessionKeyspace) : this(sessionKeyspace)
         {
             Statement = statement;
-        }
-
-        internal SessionRequestInfo(InternalPrepareRequest prepareRequest, string sessionKeyspace) : this(sessionKeyspace)
-        {
-            PrepareRequest = new PrepareRequest(prepareRequest.Query, prepareRequest.Keyspace);
         }
 
         public ConcurrentDictionary<string, object> Items { get; } = new ConcurrentDictionary<string, object>();

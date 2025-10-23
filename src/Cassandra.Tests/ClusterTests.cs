@@ -20,7 +20,6 @@ using System.Diagnostics;
 using System.Linq;
 using System.Net;
 
-using Cassandra.Connections.Control;
 using Cassandra.ExecutionProfiles;
 using Cassandra.Tests.Connections.TestHelpers;
 

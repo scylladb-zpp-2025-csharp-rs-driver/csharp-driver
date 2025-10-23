@@ -15,7 +15,6 @@
 //
 
 using System.Collections.Generic;
-using Cassandra.MetadataHelpers;
 
 namespace Cassandra.Tests.MetadataHelpers.TestHelpers
 {

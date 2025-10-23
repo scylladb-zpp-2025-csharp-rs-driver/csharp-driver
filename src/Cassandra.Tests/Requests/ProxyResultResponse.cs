@@ -14,7 +14,6 @@
 //   limitations under the License.
 //
 
-using Cassandra.Responses;
 using Moq;
 
 namespace Cassandra.Tests.Requests

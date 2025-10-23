@@ -18,8 +18,6 @@ using System;
 using System.Runtime.ExceptionServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Cassandra.Connections;
-using Cassandra.Metrics.Internal;
 
 namespace Cassandra.Tasks
 {
@@ -95,37 +93,6 @@ namespace Cassandra.Tasks
         public static T WaitToComplete<T>(Task<T> task, int timeout = Timeout.Infinite)
         {
             TaskHelper.WaitToComplete((Task)task, timeout);
-            return task.Result;
-        }
-
-        /// <summary>
-        /// Increments session client timeout counter in case of timeout.
-        /// </summary>
-        public static void WaitToCompleteWithMetrics(IMetricsManager manager, Task task, int timeout = Timeout.Infinite)
-        {
-            if (!(manager?.AreMetricsEnabled ?? false))
-            {
-                TaskHelper.WaitToComplete(task, timeout);
-                return;
-            }
-
-            try
-            {
-                TaskHelper.WaitToComplete(task, timeout);
-            }
-            catch (TimeoutException)
-            {
-                manager.GetSessionMetrics().CqlClientTimeouts.Increment();
-                throw;
-            }
-        }
-
-        /// <summary>
-        /// Increments session client timeout counter in case of timeout.
-        /// </summary>
-        public static T WaitToCompleteWithMetrics<T>(IMetricsManager manager, Task<T> task, int timeout = Timeout.Infinite)
-        {
-            TaskHelper.WaitToCompleteWithMetrics(manager, (Task)task, timeout);
             return task.Result;
         }
 
@@ -216,23 +183,6 @@ namespace Cassandra.Tasks
             {
                 tcs.TrySetResult(result);
             }
-        }
-
-        /// <summary>
-        /// Attempts to transition the underlying Task to RanToCompletion or Faulted state.
-        /// </summary>
-        public static Task TrySetRequestErrorAsync<T>(this TaskCompletionSource<T> tcs, IRequestError error, T result)
-        {
-            if (error?.Exception != null)
-            {
-                tcs.TrySetException(error.Exception);
-            }
-            else
-            {
-                tcs.TrySetResult(result);
-            }
-
-            return TaskHelper.Completed;
         }
 
         /// <summary>
@@ -410,27 +360,6 @@ namespace Cassandra.Tasks
             tcs.Task.ContinueWith(t => timer.Dispose());
             timer.Change(milliseconds, Timeout.Infinite);
             return tcs;
-        }
-
-        /// <summary>
-        /// Executes method after the provided delay
-        /// </summary>
-        public static Task<TOut> ScheduleExecution<TOut>(Func<TOut> method, HashedWheelTimer timer, int delay)
-        {
-            var tcs = new TaskCompletionSource<TOut>();
-            timer.NewTimeout(state =>
-            {
-                var tcsState = (TaskCompletionSource<TOut>)state;
-                try
-                {
-                    tcsState.SetResult(method());
-                }
-                catch (Exception ex)
-                {
-                    tcsState.SetException(ex);
-                }
-            }, tcs, delay);
-            return tcs.Task;
         }
 
         /// <summary>

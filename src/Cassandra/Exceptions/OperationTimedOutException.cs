@@ -16,7 +16,6 @@
 
 using System.Net;
 
-using Cassandra.Connections;
 
 // ReSharper disable once CheckNamespace
 namespace Cassandra
@@ -28,11 +27,6 @@ namespace Cassandra
     {
         public OperationTimedOutException(IPEndPoint address, int timeout) :
             base($"The host {address} did not reply before timeout {timeout}ms")
-        {
-        }
-
-        internal OperationTimedOutException(IConnectionEndPoint endPoint, int timeout) :
-            base($"The host {endPoint} did not reply before timeout {timeout}ms")
         {
         }
     }

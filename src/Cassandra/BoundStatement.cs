@@ -17,7 +17,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Cassandra.Requests;
 using Cassandra.Serialization;
 
 namespace Cassandra
@@ -193,20 +192,6 @@ namespace Cassandra
                 values = completeValues;
             }
             return values;
-        }
-
-        internal override IQueryRequest CreateBatchRequest(ISerializer serializer)
-        {
-            // Use the default query options as the individual options of the query will be ignored
-            var options = QueryProtocolOptions.CreateForBatchItem(this, PreparedStatement.Variables);
-            return new ExecuteRequest(
-                serializer,
-                PreparedStatement.Id,
-                PreparedStatement.ResultMetadata,
-                options,
-                IsTracing,
-                null,
-                true);
         }
 
         internal void CalculateRoutingKey(

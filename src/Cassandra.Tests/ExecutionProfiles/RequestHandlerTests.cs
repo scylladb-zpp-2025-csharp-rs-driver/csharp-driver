@@ -22,13 +22,8 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Cassandra.Connections;
 using Cassandra.ExecutionProfiles;
-using Cassandra.Observers.Null;
-using Cassandra.Requests;
-using Cassandra.Responses;
 using Cassandra.Serialization;
-using Cassandra.SessionManagement;
 using Cassandra.Tests.Connections.TestHelpers;
 using Cassandra.Tests.Requests;
 
@@ -280,7 +275,7 @@ namespace Cassandra.Tests.ExecutionProfiles
             cluster.Connect();
 
             // create session
-            var session = new Session(cluster, config, null, SerializerManager.Default, null);
+            var session = cluster.ConnectAsync(null).ConfigureAwait(false).GetAwaiter().GetResult() as Session;
 
             // create request handler
             var options = profile != null

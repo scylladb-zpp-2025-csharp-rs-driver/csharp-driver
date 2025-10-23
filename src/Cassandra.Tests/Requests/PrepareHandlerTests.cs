@@ -22,11 +22,7 @@ using System.Net;
 using System.Threading;
 using System.Threading.Tasks;
 
-using Cassandra.Connections;
-using Cassandra.Requests;
-using Cassandra.Responses;
 using Cassandra.Serialization;
-using Cassandra.SessionManagement;
 using Cassandra.Tests.Connections.TestHelpers;
 using Moq;
 
@@ -507,7 +503,7 @@ namespace Cassandra.Tests.Requests
             factory.CreatedConnections.Clear();
 
             // create session
-            var session = new Session(cluster, config, null, SerializerManager.Default, null);
+            var session = cluster.ConnectAsync(null).ConfigureAwait(false).GetAwaiter().GetResult() as Session;
 
             // create prepare handler
             var prepareHandler = new PrepareHandler(new SerializerManager(ProtocolVersion.V3), cluster, new ReprepareHandler());

@@ -17,7 +17,6 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
-using Cassandra.Requests;
 using Cassandra.Serialization;
 
 namespace Cassandra
@@ -258,11 +257,6 @@ namespace Cassandra
         {
             RetryPolicy = policy;
             return this;
-        }
-
-        internal virtual IQueryRequest CreateBatchRequest(ISerializer serializer)
-        {
-            throw new InvalidOperationException("Cannot insert this query into the batch");
         }
 
         /// <inheritdoc />

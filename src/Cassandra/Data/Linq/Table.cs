@@ -150,12 +150,15 @@ namespace Cassandra.Data.Linq
 
         public void Create()
         {
+            throw new NotImplementedException();
+
+            /* FIXME: get serializer from somewhere else.
             var serializer = _session.Cluster.Metadata.ControlConnection.Serializer.GetCurrentSerializer();
             var cqlQueries = CqlGenerator.GetCreate(serializer, PocoData, Name, KeyspaceName, false);
             foreach (var cql in cqlQueries)
             {
                 _session.Execute(cql);
-            }
+            } */
         }
 
         public void CreateIfNotExists()
@@ -170,14 +173,17 @@ namespace Cassandra.Data.Linq
             }
         }
 
-        public async Task CreateAsync()
+        public Task CreateAsync()
         {
+            throw new NotImplementedException();
+
+            /* FIXME: get serializer from somewhere else.
             var serializer = _session.Cluster.Metadata.ControlConnection.Serializer.GetCurrentSerializer();
             var cqlQueries = CqlGenerator.GetCreate(serializer, PocoData, Name, KeyspaceName, false);
             foreach (var cql in cqlQueries)
             {
                 await _session.ExecuteAsync(new SimpleStatement(cql)).ConfigureAwait(false);
-            }
+            } */
         }
 
         public async Task CreateIfNotExistsAsync()

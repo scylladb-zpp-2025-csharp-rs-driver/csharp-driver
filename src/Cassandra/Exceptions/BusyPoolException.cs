@@ -15,7 +15,6 @@
 // 
 
 using System.Net;
-using Cassandra.Connections;
 
 namespace Cassandra
 {
@@ -54,12 +53,6 @@ namespace Cassandra
         private static string GetMessage(IPEndPoint address, int maxRequestsPerConnection, int connectionLength)
         {
             return $"All connections to host {address} are busy, {maxRequestsPerConnection} requests " +
-                   $"are in-flight on {(connectionLength > 0 ? "each " : "")}{connectionLength} connection(s)";
-        }
-
-        private static string GetMessage(IConnectionEndPoint endPoint, int maxRequestsPerConnection, int connectionLength)
-        {
-            return $"All connections to host {endPoint.EndpointFriendlyName} are busy, {maxRequestsPerConnection} requests " +
                    $"are in-flight on {(connectionLength > 0 ? "each " : "")}{connectionLength} connection(s)";
         }
     }

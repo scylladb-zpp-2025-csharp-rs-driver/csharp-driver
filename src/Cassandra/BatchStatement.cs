@@ -17,7 +17,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Cassandra.Requests;
 using Cassandra.Serialization;
 
 namespace Cassandra
@@ -194,11 +193,6 @@ namespace Cassandra
         {
             _batchType = batchType;
             return this;
-        }
-
-        internal override IQueryRequest CreateBatchRequest(ISerializer serializer)
-        {
-            throw new InvalidOperationException("Batches cannot be included recursively");
         }
 
         /// <summary>

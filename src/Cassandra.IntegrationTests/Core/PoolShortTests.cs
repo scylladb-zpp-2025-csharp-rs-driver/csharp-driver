@@ -22,7 +22,6 @@ using System.Linq;
 using System.Security.Authentication;
 using System.Threading;
 using System.Threading.Tasks;
-using Cassandra.SessionManagement;
 using Cassandra.IntegrationTests.Policies.Util;
 using Cassandra.IntegrationTests.SimulacronAPI;
 using Cassandra.IntegrationTests.TestBase;

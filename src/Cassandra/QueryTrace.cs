@@ -41,7 +41,6 @@ namespace Cassandra
         private IDictionary<string, string> _parameters;
         private string _requestType;
         private long _startedAt;
-        private volatile bool _isDisconnected;
         private IPAddress _clientAddress;
         private readonly int _metadataFetchSyncTimeout;
 
@@ -189,50 +188,14 @@ namespace Cassandra
 
         private void MaybeFetchTrace()
         {
-            if (_isDisconnected)
-            {
-                //Explicitly avoid metadata fetches
-                return;
-            }
-            if (_duration != int.MinValue)
-            {
-                return;
-            }
-
-            lock (_fetchLock)
-            {
-                // If by the time we grab the lock we've fetch the events, it's
-                // fine, move on. Otherwise, fetch them.
-                if (_duration != int.MinValue)
-                {
-                    return;
-                }
-                DoFetchTrace();
-            }
-        }
-
-        private void DoFetchTrace()
-        {
-            try
-            {
-                TaskHelper.WaitToComplete(LoadAsync(), _metadataFetchSyncTimeout);
-            }
-            catch (Exception ex)
-            {
-                throw new TraceRetrievalException("Unexpected exception while fetching query trace", ex);
-            }
-            finally
-            {
-                _isDisconnected = false;
-            }
+            throw new NotImplementedException();
         }
 
         internal Task<QueryTrace> LoadAsync()
         {
-            // mark as disconnected, guaranteeing that it wont make metadata fetches triggered by a property get
-            // ReSharper disable once InconsistentlySynchronizedField : Can be both async and sync, don't mind
-            _isDisconnected = false;
-            return _metadata.GetQueryTraceAsync(this);
+            // FIXME
+            // return _metadata.GetQueryTraceAsync(this);
+            throw new NotImplementedException();
         }
 
         /// <summary>

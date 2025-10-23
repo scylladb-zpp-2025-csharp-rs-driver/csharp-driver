@@ -18,9 +18,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Cassandra.Connections;
 using Cassandra.ExecutionProfiles;
-using Cassandra.Requests;
 using Cassandra.Serialization;
 
 using NUnit.Framework;

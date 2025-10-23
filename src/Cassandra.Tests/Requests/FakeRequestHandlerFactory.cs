@@ -18,9 +18,7 @@ using System;
 using System.Threading.Tasks;
 
 using Cassandra.ExecutionProfiles;
-using Cassandra.Requests;
 using Cassandra.Serialization;
-using Cassandra.SessionManagement;
 
 using Moq;
 
