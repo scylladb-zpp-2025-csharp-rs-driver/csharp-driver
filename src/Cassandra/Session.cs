@@ -300,7 +300,7 @@ namespace Cassandra
                     // TODO: support queries with values
                     if (queryValues.Length > 0)
                     {
-                        throw new NotImplementedException("Bound statements without values are not yet supported");
+                        throw new NotImplementedException("Regular statements with values are not yet supported");
                     }
                     session_query(tcb, handle, queryString);
 
