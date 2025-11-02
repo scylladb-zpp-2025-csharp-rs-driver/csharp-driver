@@ -87,6 +87,16 @@ namespace Cassandra.Tests
         }
 
         [Test]
+        public void ClusterConnectThrowsNoHostAvailable()
+        {
+            var cluster = Cluster.Builder()
+             .AddContactPoint("127.100.100.100")
+             .Build();
+            Assert.Throws<NoHostAvailableException>(() => cluster.Connect());
+            Assert.Throws<NoHostAvailableException>(() => cluster.Connect("sample_ks"));
+        }
+
+        [Test]
         public void ClusterIsDisposableAfterInitError()
         {
             const string ip = "127.100.100.100";
