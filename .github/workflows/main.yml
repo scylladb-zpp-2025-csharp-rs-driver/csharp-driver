@@ -53,13 +53,10 @@ jobs:
       - name: Build the project
         run: dotnet build src/Cassandra/Cassandra.csproj
 
-      # TODO: enable unit tests when they are fixed.
-      # - name: Run unit tests
-      #   run: TARGET_FRAMEWORK=net9 make test-unit
+      - name: Run unit tests
+        run: TARGET_FRAMEWORK=net9 make test-unit
 
   integration-tests:
-    # TODO: enable integration tests when they are fixed.
-    if: false
     needs: linting-and-basic-unit-tests
     runs-on: ubuntu-24.04
     strategy:

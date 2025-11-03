@@ -172,5 +172,17 @@ namespace Cassandra
         {
 
         }
+
+        /// <summary>
+        /// Adds a row to the inner row list for tests purposes
+        /// </summary>
+        internal virtual void AddRow(Row row)
+        {
+            if (RowQueue == null)
+            {
+                throw new InvalidOperationException("Can not append a Row to a RowSet instance created for VOID results");
+            }
+            RowQueue.Enqueue(row);
+        }
     }
 }

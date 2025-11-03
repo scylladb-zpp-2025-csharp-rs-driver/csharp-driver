@@ -65,8 +65,12 @@ namespace Cassandra.Tests
                 }
                 rowValues.Add(kv.Value);
             }
-            var i = 0;
-            return new Row(rowValues.ToArray(), columns.ToArray(), valueMap.ToDictionary(kv => kv.Key, kv => i++));
+            // var i = 0;
+
+            return new Row();
+            // FIXME: internal API usage
+            // Use a mock Row implementation
+            // return new MockRow(rowValues.ToArray(), columns.ToArray(), valueMap.ToDictionary(kv => kv.Key, kv => i++));
         }
 
         public static IEnumerable<IRow> CreateRows(IEnumerable<IDictionary<string, object>> valueMapList)
@@ -151,13 +155,14 @@ namespace Cassandra.Tests
         {
             var h = new Host(new IPEndPoint(IPAddress.Parse(address), ProtocolOptions.DefaultPort),
                              new ConstantReconnectionPolicy(1));
-            h.SetInfo(new DictionaryBasedRow(new Dictionary<string, object>
-            {
-                { "data_center", dc },
-                { "rack", rack },
-                { "tokens", tokens },
-                { "release_version", cassandraVersion },
-            }));
+            // FIXME: internal API usage
+            // h.SetInfo(new DictionaryBasedRow(new Dictionary<string, object>
+            // {
+            //     { "data_center", dc },
+            //     { "rack", rack },
+            //     { "tokens", tokens },
+            //     { "release_version", cassandraVersion },
+            // }));
             return h;
         }
 
