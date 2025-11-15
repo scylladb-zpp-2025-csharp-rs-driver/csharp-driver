@@ -3,6 +3,8 @@ mod prepared_statement;
 mod row_set;
 mod session;
 mod task;
+mod pre_serialized_values;
+mod pre_serialized_row;
 
 use std::ffi::{CStr, c_char};
 use std::marker::PhantomData;

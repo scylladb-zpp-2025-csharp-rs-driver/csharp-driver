@@ -146,6 +146,7 @@ dependencies = [
  "futures",
  "ntest",
  "scylla",
+ "scylla-cql",
  "thiserror",
  "tokio",
  "uuid",

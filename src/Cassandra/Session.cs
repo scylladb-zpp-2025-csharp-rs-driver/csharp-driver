@@ -23,6 +23,7 @@ using System.Threading;
 using System.Threading.Tasks;
 
 using Cassandra.ExecutionProfiles;
+using Cassandra.Mapping.Attributes;
 using Cassandra.Metrics;
 using Cassandra.Serialization;
 using Cassandra.Tasks;
@@ -48,9 +49,12 @@ namespace Cassandra
 
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_query(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
-
+        
         [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
         unsafe private static extern void session_prepare(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement);
+
+        [DllImport("csharp_wrapper", CallingConvention = CallingConvention.Cdecl)]
+        unsafe private static extern void session_query_with_values(Tcb tcb, IntPtr session, [MarshalAs(UnmanagedType.LPUTF8Str)] string statement, IntPtr valuesPtr);
 
         private static readonly Logger Logger = new Logger(typeof(Session));
         private readonly ICluster _cluster;
@@ -298,11 +302,20 @@ namespace Cassandra
                     Tcb tcb = Tcb.WithTcs(tcs);
 
                     // TODO: support queries with values
-                    if (queryValues.Length > 0)
+                    if (queryValues == null || queryValues.Length == 0)
                     {
-                        throw new NotImplementedException("Regular statements with values are not yet supported");
+                        session_query(tcb, handle, queryString);
                     }
-                    session_query(tcb, handle, queryString);
+                    else
+                    {
+                        //TODO: abstract value serialization out of here
+                        var builder = new SerializedValuesBuilder();
+                        builder.AddMany(queryValues);
+                        ISerializedValues serializedValues = builder.Build();
+                        session_query_with_values(tcb, handle, queryString, serializedValues.GetNativeHandle());
+                        serializedValues.Detach();
+                    }
+                    
 
                     return tcs.Task.ContinueWith(t =>
                     {
@@ -331,7 +344,7 @@ namespace Cassandra
                     // break;
             }
 
-            throw new NotImplementedException("ExecuteAsync is not yet implemented"); // FIXME: bridge with Rust execution profiles.
+            // throw new NotImplementedException("ExecuteAsync is not yet implemented"); // FIXME: bridge with Rust execution profiles.
         }
         public IDriverMetrics GetMetrics()
         {
@@ -412,6 +425,35 @@ namespace Cassandra
                 RowSetMetadata variablesRowsMetadata = null;
                 var ps = new PreparedStatement(preparedStatementPtr, cqlQuery, variablesRowsMetadata);
                 return ps;
+            }, TaskContinuationOptions.ExecuteSynchronously);
+        }
+
+        /// <summary>
+        /// Executes a simple statement with positional values using the Rust driver's session_query_with_values.
+        /// Values must match the number and types of bind markers in the CQL string.
+        /// </summary>
+        public Task<RowSet> ExecuteAsync(string cqlQuery, System.Collections.Generic.IEnumerable<object> values)
+        {
+            if (cqlQuery == null) throw new ArgumentNullException(nameof(cqlQuery));
+            if (values == null) throw new ArgumentNullException(nameof(values));
+
+            // Build the native pre-serialized values buffer
+            var builder = new SerializedValuesBuilder();
+            builder.AddMany(values);
+            using var sv = builder.Build();
+
+            TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            Tcb tcb = Tcb.WithTcs(tcs);
+
+            // Transfer ownership of the native pointer to Rust. Do not use sv after this.
+            IntPtr valuesPtr = sv.Detach();
+            session_query_with_values(tcb, handle, cqlQuery, valuesPtr);
+
+            return tcs.Task.ContinueWith(t =>
+            {
+                IntPtr rowSetPtr = t.Result;
+                var rowSet = new RowSet(rowSetPtr);
+                return rowSet;
             }, TaskContinuationOptions.ExecuteSynchronously);
         }
 
