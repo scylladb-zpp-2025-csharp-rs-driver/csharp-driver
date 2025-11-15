@@ -1,5 +1,5 @@
 use scylla::serialize::writers::{CellValueBuilder, CellWriter, RowWriter};
-use std::ffi::{c_void};
+use std::ffi::c_void;
 use std::ptr;
 use std::slice;
 
@@ -98,11 +98,7 @@ pub extern "C" fn cell_writer_set_unset(writer: *mut c_void) -> i32 {
 /// - 0 if writer is null or data is null with len > 0
 /// - -1 if the value size exceeds i32::MAX
 #[unsafe(no_mangle)]
-pub extern "C" fn cell_writer_set_value(
-    writer: *mut c_void,
-    data: *const u8,
-    len: usize,
-) -> i32 {
+pub extern "C" fn cell_writer_set_value(writer: *mut c_void, data: *const u8, len: usize) -> i32 {
     if writer.is_null() {
         return 0;
     }
@@ -189,7 +185,6 @@ pub extern "C" fn cell_value_builder_finish(builder: *mut c_void) -> i32 {
     }
 }
 
-
 // ============================================================================
 // Helper for buffer management
 // ============================================================================
@@ -227,39 +222,39 @@ pub extern "C" fn serialized_row_get_writer(row: *mut SerializedRow) -> *mut c_v
     if row.is_null() {
         return ptr::null_mut();
     }
-    
+
     unsafe {
         let row_ref = &mut *row;
-        
+
         // Reconstruct the Vec from raw parts
         let vec = Vec::from_raw_parts(row_ref.data, row_ref.len, row_ref.capacity);
-        
+
         // We need to leak the vec because RowWriter needs a 'static reference
         let boxed_vec = Box::new(vec);
         let vec_ptr = Box::into_raw(boxed_vec); // Store the Box pointer for later access
         let static_vec = Box::leak(Box::from_raw(vec_ptr));
-        
+
         // Store the vec info before creating the writer
         let data_ptr = static_vec.as_mut_ptr();
         let len = static_vec.len();
         let capacity = static_vec.capacity();
-        
+
         // Create a RowWriter
         let writer = RowWriter::new(static_vec);
-        
+
         // Update the SerializedRow to reflect the current state and store the Vec pointer
         row_ref.data = data_ptr;
         row_ref.len = len;
         row_ref.capacity = capacity;
         row_ref.leaked_vec = vec_ptr;
-        
+
         Box::into_raw(Box::new(writer)) as *mut c_void
     }
 }
 
 /// Gets the data pointer and length from a SerializedRow.
 /// The data is valid until serialized_row_free is called.
-/// 
+///
 /// This function accesses the leaked Vec to get the updated length after
 /// RowWriter has modified it.
 #[unsafe(no_mangle)]
@@ -271,10 +266,10 @@ pub extern "C" fn serialized_row_get_data(
     if row.is_null() || data_ptr.is_null() || len.is_null() {
         return 0;
     }
-    
+
     unsafe {
         let row_ref = &*row;
-        
+
         // If we have a leaked Vec, use it to get the current length
         if !row_ref.leaked_vec.is_null() {
             let vec_ref = &*row_ref.leaked_vec;
@@ -295,7 +290,7 @@ pub extern "C" fn serialized_row_free(row: *mut SerializedRow) {
     if row.is_null() {
         return;
     }
-    
+
     unsafe {
         let row_box = Box::from_raw(row);
         // If we have a leaked Vec, reconstruct and drop it
