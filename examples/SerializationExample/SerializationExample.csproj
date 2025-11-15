@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8</TargetFramework>
+    <RootNamespace>SerializationExample</RootNamespace>
+    <AssemblyName>SerializationExample</AssemblyName>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <!-- This example uses a project reference to the local driver project. Replace with a package reference in real projects. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Cassandra\Cassandra.csproj" />
+  </ItemGroup>
+
+</Project>

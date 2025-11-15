@@ -1,6 +1,7 @@
 pub mod ffi;
 mod prepared_statement;
 mod row_set;
+pub mod serialize;
 mod session;
 mod task;
 
