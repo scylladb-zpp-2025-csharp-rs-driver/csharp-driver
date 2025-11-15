@@ -292,7 +292,7 @@ namespace Cassandra
             {
                 case RegularStatement s:
                     string queryString = s.QueryString;
-                    object[] queryValues = s.QueryValues;
+                    object[] queryValues = s.QueryValues ?? [];
 
                     TaskCompletionSource<IntPtr> tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
                     Tcb tcb = Tcb.WithTcs(tcs);
