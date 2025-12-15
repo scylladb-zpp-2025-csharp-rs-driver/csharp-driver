@@ -15,6 +15,7 @@
 //
 
 using System;
+using System.CodeDom;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -80,12 +81,19 @@ namespace Cassandra
             bridgedSession = new BridgedSession(mdSession);
         }
 
+
         static internal async Task<ISession> CreateAsync(
             ICluster cluster,
             string contactPointUris,
             string keyspace)
         {
             Task<ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris);
+
+            ILoadBalancingPolicy loadBalancingPolicy = cluster.Configuration.Policies.LoadBalancingPolicy;
+            loadBalancingPolicy.Initialize(cluster);
+            var (isTokenAware, isDCAware, localDC) = LoadBalancingPolicyForRust(
+                loadBalancingPolicy
+            );
 
             ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
             var session = new Session(cluster, keyspace, mdSession);
