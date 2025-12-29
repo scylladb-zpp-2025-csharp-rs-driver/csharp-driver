@@ -15,7 +15,6 @@
 //
 
 using System;
-using System.CodeDom;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -90,10 +89,12 @@ namespace Cassandra
             Task<ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris);
 
             ILoadBalancingPolicy loadBalancingPolicy = cluster.Configuration.Policies.LoadBalancingPolicy;
-            loadBalancingPolicy.Initialize(cluster);
-            var (isTokenAware, isDCAware, localDC) = LoadBalancingPolicyForRust(
-                loadBalancingPolicy
-            );
+
+            BridgedLoadBalancingPolicy bridgedLBP = ConfigBridgeHelper.LoadBalancingPolicyForRust(loadBalancingPolicy);
+            BridgedConfiguration bridgedConfiguration = new BridgedConfiguration
+            {
+                loadBalancingPolicy = bridgedLBP
+            };
 
             ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
             var session = new Session(cluster, keyspace, mdSession);
