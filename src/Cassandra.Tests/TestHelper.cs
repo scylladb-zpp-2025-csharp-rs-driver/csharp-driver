@@ -153,17 +153,11 @@ namespace Cassandra.Tests
         public static Host CreateHost(string address, string dc = "dc1", string rack = "rack1",
                                       IEnumerable<string> tokens = null, string cassandraVersion = null)
         {
-            var h = new Host(new IPEndPoint(IPAddress.Parse(address), ProtocolOptions.DefaultPort),
-                             new ConstantReconnectionPolicy(1));
-            // FIXME: internal API usage
-            // h.SetInfo(new DictionaryBasedRow(new Dictionary<string, object>
-            // {
-            //     { "data_center", dc },
-            //     { "rack", rack },
-            //     { "tokens", tokens },
-            //     { "release_version", cassandraVersion },
-            // }));
-            return h;
+            return new Host(
+                new IPEndPoint(IPAddress.Parse(address), ProtocolOptions.DefaultPort),
+                Guid.Empty,
+                dc,
+                rack);
         }
 
         internal class DictionaryBasedRow : IRow

@@ -2,7 +2,10 @@ use std::time::Duration;
 
 use crate::ffi::CSharpStr;
 
-use scylla::client::session_builder::SessionBuilder;
+use scylla::{
+    client::{execution_profile::ExecutionProfile, session_builder::SessionBuilder},
+    policies::load_balancing::{DefaultPolicy, DefaultPolicyBuilder},
+};
 
 /// TCP socket options passed from C#.
 ///
@@ -61,11 +64,48 @@ impl BridgedTcpConfig {
     }
 }
 
+#[repr(C)]
+pub(crate) struct BridgedLoadBalancingPolicy<'a> {
+    pub is_token_aware: bool,
+    pub is_dc_aware: bool,
+    pub local_dc: CSharpStr<'a>,
+}
+
+impl<'a> BridgedLoadBalancingPolicy<'a> {
+    pub(crate) fn apply_to_builder(
+        self,
+        builder: SessionBuilder,
+    ) -> (SessionBuilder, Option<DefaultPolicyBuilder>) {
+        let local_dc = self
+            .local_dc
+            .as_cstr()
+            .map(|cstr| cstr.to_str().unwrap().to_owned());
+
+        let mut lbpbuilder = DefaultPolicy::builder().token_aware(self.is_token_aware);
+        let waiting_for_local_dc = self.is_dc_aware && local_dc.is_none();
+        if self.is_dc_aware
+            && let Some(local_dc) = local_dc
+        {
+            lbpbuilder = lbpbuilder.prefer_datacenter(local_dc);
+        }
+        if waiting_for_local_dc {
+            return (builder, Some(lbpbuilder));
+        }
+        let profile_handle = ExecutionProfile::builder()
+            .load_balancing_policy(lbpbuilder.build())
+            .build()
+            .into_handle();
+
+        (
+            builder.default_execution_profile_handle(profile_handle),
+            None,
+        )
+    }
+}
 /// Configuration for creating a new session passed from C#.
 ///
 /// Any changes to this struct must be mirrored in the corresponding C# struct.
 #[repr(C)]
-#[derive(Debug, Copy, Clone)]
 pub(crate) struct BridgedSessionConfig<'a> {
     /// Contact point URIs, comma-separated.
     uri: CSharpStr<'a>,
@@ -78,6 +118,8 @@ pub(crate) struct BridgedSessionConfig<'a> {
 
     /// TCP socket options.
     tcp: BridgedTcpConfig,
+
+    load_balancing_policy: BridgedLoadBalancingPolicy<'a>,
 }
 
 impl<'a> BridgedSessionConfig<'a> {
@@ -90,7 +132,14 @@ impl<'a> BridgedSessionConfig<'a> {
     ///
     /// This is the single place where all session configuration is applied, so
     /// adding new options only requires changes here and in the struct definition.
-    pub(crate) fn into_session_builder(self) -> (&'a str, &'a str, SessionBuilder) {
+    pub(crate) fn into_session_builder(
+        self,
+    ) -> (
+        &'a str,
+        &'a str,
+        SessionBuilder,
+        Option<DefaultPolicyBuilder>,
+    ) {
         let uri = self.uri.as_cstr().unwrap().to_str().unwrap();
         let keyspace = self.keyspace.as_cstr().unwrap().to_str().unwrap();
 
@@ -109,7 +158,8 @@ impl<'a> BridgedSessionConfig<'a> {
         }
 
         builder = self.tcp.apply_to_builder(builder);
+        let (builder, lbpbuilder) = self.load_balancing_policy.apply_to_builder(builder);
 
-        (uri, keyspace, builder)
+        (uri, keyspace, builder, lbpbuilder)
     }
 }

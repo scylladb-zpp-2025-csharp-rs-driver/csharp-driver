@@ -86,11 +86,54 @@ namespace Cassandra
             string keyspace,
             ISerializerManager serializerManager)
         {
-            Task<RustBridge.ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris, keyspace, cluster.Configuration.SocketOptions);
+            Task<RustBridge.ManuallyDestructible> mdSessionTask = BridgedSession.Create(contactPointUris, keyspace, cluster.Configuration);
 
             RustBridge.ManuallyDestructible mdSession = await mdSessionTask.ConfigureAwait(false);
             var session = new Session(cluster, mdSession, serializerManager);
+
+            ValidateLocalDc(session, cluster.Configuration.Policies.LoadBalancingPolicy);
+
             return session;
+        }
+
+        // Throws ArgumentException if the configured local DC does not exist in the connected cluster.
+        // Mirrors the validation the old C# driver performed in DCAwareRoundRobinPolicy.Initialize().
+        private static void ValidateLocalDc(Session session, ILoadBalancingPolicy lbp)
+        {
+            var localDc = ExtractLocalDc(lbp);
+            if (localDc == null)
+                return;
+
+            using var clusterState = session.GetClusterState();
+            var context = new Metadata.RefreshContext(new Dictionary<Guid, Host>());
+            clusterState.FillHostCache(context);
+
+            var availableDcs = context.ToNewRegistry().HostsById.Values
+                .Select(h => h.Datacenter)
+                .Where(dc => dc != null)
+                .Distinct()
+                .OrderBy(dc => dc)
+                .ToList();
+
+            if (!availableDcs.Contains(localDc))
+            {
+                throw new ArgumentException(
+                    $"Datacenter {localDc} does not match any of the nodes, available datacenters: {string.Join(", ", availableDcs)}.");
+            }
+        }
+
+        private static string ExtractLocalDc(ILoadBalancingPolicy lbp)
+        {
+            if (lbp is DefaultLoadBalancingPolicy defaultLbp)
+                lbp = defaultLbp.ChildPolicy;
+
+            if (lbp is DCAwareRoundRobinPolicy dcAware)
+                return dcAware.LocalDc;
+
+            if (lbp is TokenAwarePolicy tokenAware && tokenAware.ChildPolicy is DCAwareRoundRobinPolicy dcAwareChild)
+                return dcAwareChild.LocalDc;
+
+            return null;
         }
 
         /// <inheritdoc />

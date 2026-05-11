@@ -61,39 +61,28 @@ namespace Cassandra.IntegrationTests.Policies.Util
             {
             }
 
-            if (forceSchemaAgreement)
-            {
-                TestHelper.RetryAssert(
-                    () => Assert.IsTrue(session.Cluster.Metadata.CheckSchemaAgreementAsync().Result),
-                    1000, 60);
-            }
-            else
-            {
-                TestUtils.WaitForSchemaAgreement(session.Cluster);
-            }
+            TestHelper.RetryAssert(
+                () => Assert.IsTrue(session.Cluster.Metadata.CheckSchemaAgreementAsync().Result),
+                1000, 60);
             session.ChangeKeyspace(keyspace ?? DefaultKeyspace);
             session.Execute($"CREATE TABLE {TableName} (k int PRIMARY KEY, i int)");
-            if (forceSchemaAgreement)
-            {
-                TestHelper.RetryAssert(
-                    () => Assert.IsTrue(session.Cluster.Metadata.CheckSchemaAgreementAsync().Result),
-                    1000, 60);
-            }
-            else
-            {
-                TestUtils.WaitForSchemaAgreement(session.Cluster);
-            }
+            TestHelper.RetryAssert(
+                () => Assert.IsTrue(session.Cluster.Metadata.CheckSchemaAgreementAsync().Result),
+                1000, 60);
         }
 
         public void CreateMultiDcSchema(ISession session, int dc1RF = 1, int dc2RF = 1)
         {
             session.Execute(string.Format(TestUtils.CreateKeyspaceGenericFormat, DefaultKeyspace, "NetworkTopologyStrategy",
                                               string.Format("'dc1' : {0}, 'dc2' : {1}", dc1RF, dc2RF)));
-            TestUtils.WaitForSchemaAgreement(session.Cluster);
+            TestHelper.RetryAssert(
+                () => Assert.IsTrue(session.Cluster.Metadata.CheckSchemaAgreementAsync().Result),
+                1000, 60);
             session.ChangeKeyspace(DefaultKeyspace);
-            TestUtils.WaitForSchemaAgreement(session.Cluster);
             session.Execute(string.Format("CREATE TABLE {0} (k int PRIMARY KEY, i int)", TableName));
-            TestUtils.WaitForSchemaAgreement(session.Cluster);
+            TestHelper.RetryAssert(
+                () => Assert.IsTrue(session.Cluster.Metadata.CheckSchemaAgreementAsync().Result),
+                1000, 60);
         }
 
         ///  Coordinator management/count

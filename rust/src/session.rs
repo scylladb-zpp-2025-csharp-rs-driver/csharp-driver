@@ -61,7 +61,7 @@ pub extern "C" fn empty_bridged_result_free(ptr: BridgedOwnedSharedPtr<EmptyBrid
 
 #[unsafe(no_mangle)]
 pub extern "C" fn session_create(tcb: Tcb<ManuallyDestructible>, config: BridgedSessionConfig<'_>) {
-    let (uri, keyspace, session_builder) = config.into_session_builder();
+    let (uri, keyspace, session_builder, lbpbuilder) = config.into_session_builder();
     let uri = uri.to_owned();
     let keyspace = keyspace.to_owned();
 
@@ -75,10 +75,23 @@ pub extern "C" fn session_create(tcb: Tcb<ManuallyDestructible>, config: Bridged
             uri,
             keyspace
         );
-        tracing::trace!(
-            "[FFI] Contacted node's address: {}",
-            session.get_cluster_state().get_nodes_info()[0].address
-        );
+        let node = session.get_cluster_state().get_nodes_info()[0].address;
+        tracing::trace!("[FFI] Contacted node's address: {}", node);
+        if let Some(lbpbuilder) = lbpbuilder
+            && let Some(local_dc) = session.get_cluster_state().get_nodes_info()[0]
+                .datacenter
+                .as_deref()
+            {
+                let new_lbp = lbpbuilder.prefer_datacenter(local_dc.to_owned()).build();
+                let new_profile = session
+                    .get_default_execution_profile_handle()
+                    .pointee_to_builder()
+                    .load_balancing_policy(new_lbp)
+                    .build();
+                let mut handle = session.get_default_execution_profile_handle().clone();
+                handle.map_to_another_profile(new_profile);
+                tracing::trace!("[FFI] Local datacenter: {}", local_dc);
+            }
 
         Ok(Arc::new(RwLock::new(BridgedSessionInner {
             session: Some(session),
@@ -86,7 +99,7 @@ pub extern "C" fn session_create(tcb: Tcb<ManuallyDestructible>, config: Bridged
     })
 }
 
-/// Shuts down the session by acquiring a write lock and clearing the connected state.
+///Shuts down the session by acquiring a write lock and clearing the connected state.
 /// This blocks all future queries. Once shutdown, the session cannot be used for queries anymore.
 #[unsafe(no_mangle)]
 pub extern "C" fn session_shutdown(

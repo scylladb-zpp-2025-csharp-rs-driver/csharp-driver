@@ -25,7 +25,7 @@ using Assert = NUnit.Framework.Legacy.ClassicAssert;
 
 namespace Cassandra.IntegrationTests.Policies.Tests
 {
-    [TestFixture, Category(TestCategory.Long), Ignore("tests that are not marked with 'short' need to be refactored/deleted")]
+    [TestFixture, Category(TestCategory.Long)]
     public class LoadBalancingPolicyTests : TestGlobals
     {
 
@@ -37,7 +37,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
         /// @test_category connection:outage
         /// @test_category load_balancing:round_robin
         /// </summary>
-        [Test]
+        [Test, Ignore("Requires Metadata.CheckSchemaAgreementAsync which is not yet implemented")]
         public void RoundRobin_OneDc_OneNodeAdded_OneNodeDecommissioned()
         {
             // Setup
@@ -84,7 +84,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
         /// @test_category connection:outage
         /// @test_category load_balancing:round_robin
         /// </summary>
-        [Test]
+        [Test, Ignore("Requires Metadata.CheckSchemaAgreementAsync which is not yet implemented")]
         public void RoundRobin_TwoDCs_EachDcHasOneNodeAddedAndDecommissioned()
         {
             // Setup
@@ -176,7 +176,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
         /// 
         /// @test_category load_balancing:dc_aware
         /// </summary>
-        [Test]
+        [Test, Ignore("Requires Metadata.CheckSchemaAgreementAsync which is not yet implemented")]
         public void RoundRobin_TwoDCs_DcAware()
         {
             // Setup
@@ -199,7 +199,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
         /// @test_category connection:outage
         /// @test_category load_balancing:dc_aware
         /// </summary>
-        [Test]
+        [Test, Ignore("Requires Metadata.CheckSchemaAgreementAsync which is not yet implemented")]
         public void RoundRobin_OneDc_AllNodesForceStoppedOneAtATime()
         {
             // Setup
@@ -246,7 +246,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
         /// @test_category load_balancing:dc_aware,round_robin
         /// @test_category replication_strategy
         /// </summary>
-        [Test]
+        [Test, Ignore("Requires Metadata.CheckSchemaAgreementAsync which is not yet implemented")]
         public void RoundRobin_TokenAware_TwoDCsWithOneNodeEach_ReplicationFactorTwo()
         {
             // Setup
@@ -270,7 +270,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
         /// 
         /// @test_category load_balancing:dc_aware,round_robin
         /// </summary>
-        [Test]
+        [Test, Ignore("Requires Metadata.CheckSchemaAgreementAsync which is not yet implemented")]
         public void RoundRobin_TokenAware_NotPrepared()
         {
             TokenAwareTest(false);
@@ -282,7 +282,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
         /// 
         /// @test_category load_balancing:dc_aware,round_robin
         /// </summary>
-        [Test]
+        [Test, Ignore("Requires Metadata.CheckSchemaAgreementAsync which is not yet implemented")]
         public void RoundRobin_TokenAware_Prepared()
         {
             TokenAwareTest(true);
@@ -337,7 +337,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
         /// @expected_result TokenMap is successfully rebuilt with decomissioned DC, with existing RFs.
         ///
         /// @test_category control_connection
-        [Test]
+        [Test, Ignore("Requires Metadata.CheckSchemaAgreementAsync which is not yet implemented")]
         public void TokenMap_Rebuild_With_Decommissioned_DC_Existing_RF()
         {
             // Create a 2dc:1node each cluster

@@ -515,9 +515,8 @@ pub extern "C" fn row_set_fill_coordinators(
             }
         };
 
-        let ffi_exception = unsafe {
-            add_coordinator(context_ptr, FFISlice::new(ip_bytes_slice), port)
-        };
+        let ffi_exception =
+            unsafe { add_coordinator(context_ptr, FFISlice::new(ip_bytes_slice), port) };
         if ffi_exception.has_exception() {
             return ffi_exception;
         }
