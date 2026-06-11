@@ -22,7 +22,8 @@ namespace Cassandra
     /// <summary>
     /// A load balancing policy designed to run against Apache Cassandra clusters.
     /// <para>
-    ///  For most workloads, the query plan will be determined in a similar way to TokenAwarePolicy(DCAwareRoundRobinPolicy).
+    ///  If the local dc is specified, the behaviour will be the same as TokenAwarePolicy(DCAwareRoundRobinPolicy(localDc)).
+    /// By default, if no load balancing policy is specified when building the cluster, the driver will use TokenAwarePolicy(RoundRobinPolicy).
     /// </para>
     /// <para>
     ///  For graph analytics queries, this policy sets the preferred analytics graph server
@@ -51,7 +52,6 @@ namespace Cassandra
         {
             ChildPolicy = new TokenAwarePolicy(new DCAwareRoundRobinPolicy(localDc));
         }
-
         internal ILoadBalancingPolicy ChildPolicy { get; }
 
         /// <summary>
@@ -63,17 +63,7 @@ namespace Cassandra
         /// <returns>the HostDistance to <c>host</c>.</returns>
         public HostDistance Distance(Host host)
         {
-            // FIXME
-            // var lastPreferredHost = _lastPreferredHost;
-            // if (lastPreferredHost != null && host == lastPreferredHost)
-            // {
-            //     // Set the last preferred host as local.
-            //     // It's somewhat "hacky" but ensures that the pool for the graph analytics host has the appropriate size
-            //     return HostDistance.Local;
-            // }
-
-            // return ChildPolicy.Distance(host);
-            throw new NotImplementedException();
+            return ChildPolicy.Distance(host);
         }
 
         /// <summary>
@@ -81,7 +71,8 @@ namespace Cassandra
         /// </summary>
         public void Initialize(ICluster cluster)
         {
-            ChildPolicy.Initialize(cluster);
+            throw new NotSupportedException(
+                "Initialize is not supported. Load balancing is handled by the Rust driver internally.");
         }
 
         /// <summary>
@@ -89,14 +80,8 @@ namespace Cassandra
         /// </summary>
         public IEnumerable<HostShard> NewQueryPlan(string keyspace, IStatement statement)
         {
-            // FIXME
-            // if (statement is TargettedSimpleStatement targetedStatement && targetedStatement.PreferredHost != null)
-            // {
-            //     _lastPreferredHost = targetedStatement.PreferredHost;
-            // return YieldPreferred(keyspace, targetedStatement);
-            // }
-
-            return ChildPolicy.NewQueryPlan(keyspace, statement);
+            throw new NotSupportedException(
+                "NewQueryPlan is not supported. Query routing is handled by the Rust driver internally.");
         }
     }
 }

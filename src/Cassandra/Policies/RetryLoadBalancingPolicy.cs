@@ -16,14 +16,11 @@
 
 using System;
 using System.Collections.Generic;
-using System.Threading;
 
 namespace Cassandra
 {
     public class RetryLoadBalancingPolicy : ILoadBalancingPolicy
     {
-        public EventHandler<RetryLoadBalancingPolicyEventArgs> ReconnectionEvent;
-
         public RetryLoadBalancingPolicy(ILoadBalancingPolicy loadBalancingPolicy, IReconnectionPolicy reconnectionPolicy)
         {
             ReconnectionPolicy = reconnectionPolicy;
@@ -36,7 +33,9 @@ namespace Cassandra
 
         public void Initialize(ICluster cluster)
         {
-            LoadBalancingPolicy.Initialize(cluster);
+            throw new NotSupportedException(
+                "RetryLoadBalancingPolicy is not supported. " +
+                "The Rust driver handles node reconnection internally.");
         }
 
         public HostDistance Distance(Host host)
@@ -46,23 +45,9 @@ namespace Cassandra
 
         public IEnumerable<HostShard> NewQueryPlan(string keyspace, IStatement query)
         {
-            IReconnectionSchedule schedule = ReconnectionPolicy.NewSchedule();
-            while (true)
-            {
-                IEnumerable<HostShard> childQueryPlan = LoadBalancingPolicy.NewQueryPlan(keyspace, query);
-                foreach (HostShard host in childQueryPlan)
-                    yield return host;
-
-                if (ReconnectionEvent != null)
-                {
-                    var ea = new RetryLoadBalancingPolicyEventArgs(schedule.NextDelayMs());
-                    ReconnectionEvent(this, ea);
-                    if (ea.Cancel)
-                        break;
-                }
-                else
-                    Thread.Sleep((int)schedule.NextDelayMs());
-            }
+            throw new NotSupportedException(
+                "RetryLoadBalancingPolicy is not supported. " +
+                "The Rust driver handles node reconnection internally.");
         }
     }
 }

@@ -37,7 +37,7 @@ namespace Cassandra
         /// </para>
         /// </summary>
         public static ILoadBalancingPolicy DefaultLoadBalancingPolicy =>
-            new DefaultLoadBalancingPolicy(new TokenAwarePolicy(new DCAwareRoundRobinPolicy()));
+            new DefaultLoadBalancingPolicy(new TokenAwarePolicy(new RoundRobinPolicy()));
 
         /// <summary>
         /// Creates a new instance of the default load balancing policy with the provided local datacenter.
