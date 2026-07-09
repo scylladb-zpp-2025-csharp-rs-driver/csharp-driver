@@ -1,4 +1,4 @@
-//
+﻿//
 //       Copyright (C) DataStax Inc.
 //
 //    Licensed under the Apache License, Version 2.0 (the "License");
@@ -80,7 +80,7 @@ namespace ColumnEncryptionExample
             try {
 
                 // prepare schema
-                await _session.ExecuteAsync(new SimpleStatement($"CREATE KEYSPACE IF NOT EXISTS {Keyspace} WITH replication = {{ 'class': 'SimpleStrategy', 'replication_factor': '1' }}")).ConfigureAwait(false);
+                await _session.ExecuteAsync(new SimpleStatement($"CREATE KEYSPACE IF NOT EXISTS {Keyspace} WITH replication = {{ 'class': 'NetworkTopologyStrategy', 'replication_factor': '1' }}")).ConfigureAwait(false);
                 await _session.ExecuteAsync(new SimpleStatement($"CREATE TABLE IF NOT EXISTS {Keyspace}.{Table}(id blob, address blob, public_notes text, PRIMARY KEY(id))")).ConfigureAwait(false);
 
                 await PreparedStatementsExample().ConfigureAwait(false);
