@@ -1,4 +1,4 @@
-﻿//
+//
 //       Copyright (C) DataStax Inc.
 //
 //    Licensed under the Apache License, Version 2.0 (the "License");
@@ -119,7 +119,7 @@ namespace ColumnEncryptionExample
             var user = users[0];
             Console.WriteLine($"User {user.GetValue<Guid>("id")} has address \"{user.GetValue<string>("address")}\" and public notes \"{user.GetValue<string>("public_notes")}\"");
         }
-        
+
         private async Task SimpleStatementsExample()
         {
             var userId = Guid.NewGuid();
@@ -128,9 +128,9 @@ namespace ColumnEncryptionExample
 
             // using encrypted columns with SimpleStatements require the parameters to be wrapped with the EncryptedValue type
             var insert = new SimpleStatement(
-                InsertCqlQuery, 
-                new EncryptedValue(userId, _userKeyAndIv), 
-                new EncryptedValue(address, _addressKey), 
+                InsertCqlQuery,
+                new EncryptedValue(userId, _userKeyAndIv),
+                new EncryptedValue(address, _addressKey),
                 publicNotes);
             await _session.ExecuteAsync(insert).ConfigureAwait(false);
 

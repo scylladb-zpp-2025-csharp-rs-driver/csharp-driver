@@ -97,7 +97,7 @@ namespace Api
                 new SimpleStatement(
                     "CREATE KEYSPACE IF NOT EXISTS weather WITH REPLICATION = { 'class': 'SimpleStrategy', 'replication_factor': 1 }"))
                 .ConfigureAwait(false);
-            
+
             await session.ExecuteAsync(
                     new SimpleStatement(
                         "CREATE TABLE IF NOT EXISTS weather.weather_forecast ( id uuid PRIMARY KEY, date timestamp, summary text, temp_c int )"))
