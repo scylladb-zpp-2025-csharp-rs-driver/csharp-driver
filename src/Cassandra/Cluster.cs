@@ -221,7 +221,7 @@ namespace Cassandra
         /// </summary>
         /// <param name="replication">Replication property for this keyspace. To set it, refer to the <see cref="ReplicationStrategies"/> class methods.
         /// It is a dictionary of replication property sub-options where key is a sub-option name and value is a value for that sub-option.
-        /// <p>Default value is <c>SimpleStrategy</c> with <c>'replication_factor' = 2</c></p></param>
+        /// <p>Default value is <c>NetworkTopologyStrategy</c> with <c>'replication_factor' = 2</c></p></param>
         /// <param name="durableWrites">Whether to use the commit log for updates on this keyspace. Default is set to <c>true</c>.</param>
         /// <returns>a new session on this cluster set to default keyspace.</returns>
         public ISession ConnectAndCreateDefaultKeyspaceIfNotExists(Dictionary<string, string> replication = null, bool durableWrites = true)

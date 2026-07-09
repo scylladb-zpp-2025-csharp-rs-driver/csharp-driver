@@ -99,7 +99,7 @@ namespace Cassandra
         /// Replication property for this keyspace.
         /// To set it, refer to the <see cref="ReplicationStrategies"/> class methods.
         /// It is a dictionary of replication property sub-options where key is a sub-option name and value is a value for that sub-option.
-        /// <para>Default value is <c>SimpleStrategy</c> with <c>replication_factor = 1</c></para>
+        /// <para>Default value is <c>NetworkTopologyStrategy</c> with <c>replication_factor = 1</c></para>
         /// </param>
         /// <param name="durableWrites">Whether to use the commit log for updates on this keyspace. Default is set to <c>true</c>.</param>
         void CreateKeyspace(string keyspaceName, Dictionary<string, string> replication = null, bool durableWrites = true);
@@ -113,7 +113,7 @@ namespace Cassandra
         /// Replication property for this keyspace.
         /// To set it, refer to the <see cref="ReplicationStrategies"/> class methods.
         /// It is a dictionary of replication property sub-options where key is a sub-option name and value is a value for that sub-option.
-        /// <para>Default value is <c>'SimpleStrategy'</c> with <c>'replication_factor' = 2</c></para>
+        /// <para>Default value is <c>'NetworkTopologyStrategy'</c> with <c>'replication_factor' = 2</c></para>
         /// </param>
         /// <param name="durableWrites">Whether to use the commit log for updates on this keyspace. Default is set to <c>true</c>.</param>
         void CreateKeyspaceIfNotExists(string keyspaceName, Dictionary<string, string> replication = null, bool durableWrites = true);

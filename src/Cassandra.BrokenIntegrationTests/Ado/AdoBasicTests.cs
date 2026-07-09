@@ -58,7 +58,7 @@ namespace Cassandra.IntegrationTests.Data
 
             VerifyStatement(
                 QueryType.Query,
-                $"CREATE KEYSPACE \"{keyspaceName}\" WITH replication = {{ 'class' : 'SimpleStrategy', 'replication_factor' : {3} }}",
+                $"CREATE KEYSPACE \"{keyspaceName}\" WITH replication = {{ 'class' : 'NetworkTopologyStrategy', 'replication_factor' : {3} }}",
                 1);
 
             _connection.ChangeDatabase(keyspaceName);

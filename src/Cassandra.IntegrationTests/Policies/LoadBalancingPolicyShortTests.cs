@@ -71,7 +71,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new TokenAwarePolicy(new RoundRobinPolicy())));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 2}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 2}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
 
@@ -99,7 +99,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new TokenAwarePolicy(new RoundRobinPolicy())));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
             session.Execute("INSERT INTO tbl (k, v) VALUES (42, 1)");
@@ -124,7 +124,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new TokenAwarePolicy(new RoundRobinPolicy())));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
             var ps = session.Prepare("INSERT INTO tbl (k, v) VALUES (?, ?)");
@@ -151,7 +151,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new DCAwareRoundRobinPolicy("datacenter1")));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
             session.Execute("INSERT INTO tbl (k, v) VALUES (1, 42)");
@@ -173,7 +173,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new DCAwareRoundRobinPolicy("datacenter1", permitDcFailover: true)));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
             session.Execute("INSERT INTO tbl (k, v) VALUES (1, 42)");
@@ -201,7 +201,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new TokenAwarePolicy(new RoundRobinPolicy())));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
             for (var i = 0; i < 5; i++)
@@ -220,7 +220,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new RoundRobinPolicy()));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
             for (var i = 0; i < 5; i++)
@@ -252,7 +252,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new DCAwareRoundRobinPolicy("dc1")));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
             session.Execute("INSERT INTO tbl (k, v) VALUES (1, 42)");
@@ -279,7 +279,7 @@ namespace Cassandra.IntegrationTests.Policies.Tests
             var cluster = GetNewTemporaryCluster(b => b.WithLoadBalancingPolicy(new TokenAwarePolicy(new DCAwareRoundRobinPolicy("dc1"))));
             var session = cluster.Connect();
             var ks = TestUtils.GetUniqueKeyspaceName().ToLowerInvariant();
-            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'SimpleStrategy', 'replication_factor': 1}}");
+            session.Execute($"CREATE KEYSPACE \"{ks}\" WITH replication = {{'class': 'NetworkTopologyStrategy', 'replication_factor': 1}}");
             session.ChangeKeyspace(ks);
             session.Execute("CREATE TABLE tbl (k int PRIMARY KEY, v int)");
             var ps = session.Prepare("INSERT INTO tbl (k, v) VALUES (?, ?)");
