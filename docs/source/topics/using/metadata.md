@@ -110,7 +110,7 @@ must be established before calling this method.
 These accept an already-serialized partition key (in routing-key format) rather than
 per-column values. They are kept only for backward compatibility and are marked
 `[Obsolete]`, because they cannot be table-aware: they **always** use the Murmur3
-partitioner and cannot perform tablet-aware routing. When no keyspace is supplied, the result falls back to the single primary token owner. It is discouraged to use this overload.
+partitioner and cannot perform tablet-aware routing. When no keyspace is supplied, the result falls back to the single primary token owner. It is discouraged to use these overloads.
 
 There is no dedicated public serializer for the `byte[]` routing-key format. If you must use these overloads, the practical way to obtain the bytes is to reuse a routing key the driver already computed, e.g. `prepared.Bind(values).RoutingKey.RawRoutingKey`. Prefer migrating to the `(keyspace, table, partitionKeyValues)` overload instead.
 
@@ -175,3 +175,68 @@ var isSchemaInAgreement = await session.Cluster.Metadata.CheckSchemaAgreementAsy
 ```
 
 Note that the on-demand check using `Metadata.CheckSchemaAgreementAsync()` does not retry, it only queries system tables once.
+
+### Explicitly waiting for schema agreement
+
+The automatic wait described above covers schema changes made through this `ISession`. However, it is not triggered when the schema is altered by some other party — for example an independent, concurrent process, an operator running `cqlsh`, or another application instance. For those cases you can wait for agreement explicitly with `ISession.WaitForSchemaAgreement` (and its `...Async` counterparts):
+
+```csharp
+// Asynchronously waits until every reachable node reports the same schema version.
+await session.WaitForSchemaAgreementAsync().ConfigureAwait(false);
+
+// Blocking equivalent.
+session.WaitForSchemaAgreement();
+
+```
+
+These methods **throw** on failure or timeout (see [Error handling](#error-handling) below); on success they simply return once agreement is reached.
+
+#### Requiring a specific node in the agreement
+
+By default, waiting for agreement considers only the nodes that are currently reachable; a node that cannot be queried is skipped. The following overloads come in handy when you need a stronger guarantee: that a *particular* node has actually reported its schema version and is part of the agreed set — typically the node that just applied a schema change.
+
+```csharp
+// By host id (UUID).
+await session.WaitForSchemaAgreementAsync(hostId).ConfigureAwait(false);
+
+// By address. Returns true on success (the bool exists for signature
+// compatibility; failure is signalled by an exception, not a false result).
+session.WaitForSchemaAgreement(new IPEndPoint(IPAddress.Parse("127.0.0.1"), 9042));
+
+// By the RowSet returned from a previous query: the coordinator that served
+// that query becomes the required node.
+var rs = await session.ExecuteAsync(new SimpleStatement("SELECT ...")).ConfigureAwait(false);
+await session.WaitForSchemaAgreementAsync(rs).ConfigureAwait(false);
+```
+
+The `RowSet` variant is handy right after a DDL statement: it pins the wait to the exact coordinator that executed your change, ensuring that node has caught up before you proceed.
+
+#### Error handling
+
+All schema-agreement failures derive from `SchemaAgreementException` (itself a
+`DriverException`), so you can catch the whole family with a single `catch`, or
+distinguish specific causes by type:
+
+| Exception | Meaning |
+| --- | --- |
+| `SchemaAgreementTimeoutException` | Nodes did not converge to a single schema version within the configured timeout. |
+| `SchemaAgreementRequiredHostAbsentException` | A host required to report its version (via the required-node overloads) is not present in the connection pool. |
+| `SchemaAgreementRowsResultException` | The schema-version query response could not be interpreted as a rows result. |
+| `SchemaAgreementSingleRowException` | A row of the schema-version query response could not be deserialized. |
+
+Failures that originate from a lower level (connection pool, statement preparation, or the request itself) are surfaced as the corresponding regular driver exception rather than a `SchemaAgreementException`.
+
+```csharp
+try
+{
+    await session.WaitForSchemaAgreementAsync().ConfigureAwait(false);
+}
+catch (SchemaAgreementTimeoutException)
+{
+    // Nodes never agreed within the timeout — decide whether to retry or abort.
+}
+catch (SchemaAgreementException)
+{
+    // Any other schema-agreement-specific failure.
+}
+```
