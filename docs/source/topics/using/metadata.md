@@ -31,7 +31,13 @@ foreach (var host in cluster.AllHosts())
 }
 ```
 
-Additionally, the keyspaces information is already loaded into the `Metadata` object, once the client is connected (when matadata synchronization is enabled):
+### How nodes are identified
+
+ScyllaDB takes a different approach to node identity than Cassandra and the older DataStax drivers, which treated a node's IP address as its primary identifier. In ScyllaDB, nodes are primarily identified by a stable `HostId` (a `Guid`/UUID) that remains the same across restarts, reconnections, and address changes — unlike an IP, which can move.
+
+Each `Host` exposes both — `Host.HostId` and `Host.Address` — but you are advised to stick to the `HostId` convention. Where the public API still accepts an IP address (for example the `WaitForSchemaAgreement(IPEndPoint)` overload), it is kept mainly for backward compatibility; prefer the `Guid`-based overloads.
+
+Additionally, the keyspaces information is already loaded into the `Metadata` object, once the client is connected (when metadata synchronization is enabled):
 
 ```csharp
 foreach (var keyspace in cluster.Metadata.GetKeyspaces())
