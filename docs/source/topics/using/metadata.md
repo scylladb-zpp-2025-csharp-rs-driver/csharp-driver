@@ -53,6 +53,67 @@ foreach (var c in tableInfo.ColumnsByName)
 
 When metadata synchronization is enabled, table metadata is cached on the first request for that specific table and the cache gets evicted whenever schema or topology changes happen that affect the table's keyspace.
 
+## Finding the replicas for a partition key
+
+Sometimes you want to know, ahead of time, which nodes own a given partition — for
+example to co-locate work with the data, to build a custom routing scheme, or simply
+to inspect the cluster's replica placement. `Metadata.GetReplicas` (also exposed as
+`ICluster.GetReplicas`) answers that question.
+
+The result is a collection of `HostShard` values. Each one pairs the replica `Host`
+with the `Shard` on that host that owns the partition. (Note the difference - ScyllaDB is sharded per core; against Cassandra the shard is always `0`).
+
+### Recommended overload
+
+```csharp
+public ICollection<HostShard> GetReplicas(
+    string keyspace, string table, IReadOnlyList<object> partitionKeyValues);
+```
+
+Pass the keyspace, the table, and the partition-key column values **in the order they
+are declared in the table's partition key**. Example:
+
+```csharp
+// CREATE TABLE ks.users (id uuid, name text, PRIMARY KEY (id));
+var id = Guid.Parse("f81d4fae-7dec-11d0-a765-00a0c91e6bf6");
+
+foreach (var replica in cluster.Metadata.GetReplicas("ks", "users", new object[] { id }))
+{
+    Console.WriteLine($"{replica.Host.Address} (shard {replica.Shard})");
+}
+```
+
+For a composite partition key, list every partition-key column in order:
+
+```csharp
+// CREATE TABLE ks.events (day date, region text, seq bigint,
+//                         PRIMARY KEY ((day, region), seq));
+var replicas = cluster.Metadata.GetReplicas(
+    "ks", "events", new object[] { new LocalDate(2026, 7, 15), "eu-central" });
+```
+
+Because this overload knows the table, it uses the table's configured partitioner and
+supports **tablet-aware** routing — it consults tablet metadata when the keyspace uses tablets. This is the overload you should prefer for all new code.
+
+`keyspace`, `table`, and `partitionKeyValues` must all be non-null, and
+`partitionKeyValues` must be non-empty; otherwise an `ArgumentNullException` /
+`ArgumentException` is thrown. Keyspace and table names are case-sensitive. A session
+must be established before calling this method.
+
+### Legacy, obsolete overloads
+
+```csharp
+[Obsolete] public ICollection<HostShard> GetReplicas(byte[] partitionKey);
+[Obsolete] public ICollection<HostShard> GetReplicas(string keyspace, byte[] partitionKey);
+```
+
+These accept an already-serialized partition key (in routing-key format) rather than
+per-column values. They are kept only for backward compatibility and are marked
+`[Obsolete]`, because they cannot be table-aware: they **always** use the Murmur3
+partitioner and cannot perform tablet-aware routing. When no keyspace is supplied, the result falls back to the single primary token owner. It is discouraged to use this overload.
+
+There is no dedicated public serializer for the `byte[]` routing-key format. If you must use these overloads, the practical way to obtain the bytes is to reuse a routing key the driver already computed, e.g. `prepared.Bind(values).RoutingKey.RawRoutingKey`. Prefer migrating to the `(keyspace, table, partitionKeyValues)` overload instead.
+
 ## Schema agreement
 
 Schema changes need to be propagated to all nodes in the cluster. Once they have settled on a common version, we say that they are in agreement.
