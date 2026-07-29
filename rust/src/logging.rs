@@ -88,7 +88,7 @@ impl FormattedFieldsVisitor {
             .message_field_name
             .is_some_and(|message_field_name| field.name() == message_field_name);
 
-        let prefix = if self.has_entry { ", " } else { "" };
+        let prefix = if self.has_entry { " " } else { "" };
 
         if should_omit_name {
             // If this field is the "message" field, we omit the field name and separator to produce cleaner output.
