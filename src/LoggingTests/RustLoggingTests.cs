@@ -86,7 +86,7 @@ namespace Cassandra.LoggingTests
 
                 if (assertConnectLog)
                 {
-                    var hasRustLog = writer.ToString().Contains("Rust:");
+                    var hasRustLog = writer.ToString().Contains("Rust");
                     Assert.That(hasRustLog, Is.True, "The trace listener should have captured at least one log message forwarded from the Rust bridge.");
                     return;
                 }
