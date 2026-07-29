@@ -68,16 +68,14 @@ impl From<CsharpLogLevel> for LevelFilter {
 struct FormattedFieldsVisitor {
     output: String,
     has_entry: bool,
-    field_separator: &'static str,
     message_field_name: Option<&'static str>,
 }
 
 impl FormattedFieldsVisitor {
-    fn new(field_separator: &'static str, message_field_name: Option<&'static str>) -> Self {
+    fn new(message_field_name: Option<&'static str>) -> Self {
         Self {
             output: String::new(),
             has_entry: false,
-            field_separator,
             message_field_name,
         }
     }
@@ -94,14 +92,7 @@ impl FormattedFieldsVisitor {
             // If this field is the "message" field, we omit the field name and separator to produce cleaner output.
             write!(self.output, "{prefix}{value:?}").unwrap();
         } else {
-            write!(
-                self.output,
-                "{prefix}{}{}{:?}",
-                field.name(),
-                self.field_separator,
-                value
-            )
-            .unwrap();
+            write!(self.output, "{prefix}{}={:?}", field.name(), value).unwrap();
         }
 
         self.has_entry = true;
@@ -138,7 +129,7 @@ where
             return;
         };
 
-        let mut visitor = FormattedFieldsVisitor::new("=", None);
+        let mut visitor = FormattedFieldsVisitor::new(None);
         attrs.record(&mut visitor);
         span.extensions_mut().insert(SpanFields(visitor.output));
     }
@@ -157,7 +148,7 @@ where
         let meta = event.metadata();
         let event_level = meta.level();
 
-        let mut visitor = FormattedFieldsVisitor::new(": ", Some("message"));
+        let mut visitor = FormattedFieldsVisitor::new(Some("message"));
         event.record(&mut visitor);
 
         let ffi_level = CsharpLogLevel::from(*event_level);
