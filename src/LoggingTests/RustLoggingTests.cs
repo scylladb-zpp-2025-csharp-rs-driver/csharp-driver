@@ -133,6 +133,8 @@ namespace Cassandra.LoggingTests
                     record.Contains("This is a"));
 
                 Assert.That(rustLogCount, Is.EqualTo(expectedMessageCount), $"Expected logger factory to capture {expectedMessageCount} Rust log entries. Captured: {string.Join(" | ", provider.Records)}");
+                Assert.That(provider.Records.Any(record => record.Contains('\x1b')), Is.False,
+                    $"Rust log entries forwarded to an ILoggerProvider must not contain ANSI escape codes. Captured: {string.Join(" | ", provider.Records)}");
             }
             finally
             {
