@@ -93,9 +93,11 @@ TEST_LOGGING_CASES ?= Should_Forward_Rust_Log_Entries_Using_LoggerFactory Should
 .PHONY: test-logging
 test-logging: .use-development-snk build-rust-testing
 	dotnet build $(TEST_LOGGING_CSPROJ) --property:BuildRust=false
+	status=0; \
 	for test in $(TEST_LOGGING_CASES); do \
-		dotnet test --no-build $(TEST_TARGET_OPTIONS) $(TEST_LOGGING_CSPROJ) $(TEST_INTEGRATION_OPTIONS) --filter "FullyQualifiedName~RustLoggingTests.$$test"; \
-	done
+		dotnet test --no-build $(TEST_TARGET_OPTIONS) $(TEST_LOGGING_CSPROJ) $(TEST_INTEGRATION_OPTIONS) --filter "FullyQualifiedName~RustLoggingTests.$$test" || status=1; \
+	done; \
+	exit $$status
 
 .PHONY: test-integration-cassandra
 test-integration-cassandra: .use-development-snk .prepare-cassandra-ccm build-rust-testing

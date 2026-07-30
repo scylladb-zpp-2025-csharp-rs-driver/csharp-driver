@@ -778,7 +778,7 @@ namespace Cassandra
             /// </summary>
 
             [DllImport(NativeLibrary.CSharpWrapper, CallingConvention = CallingConvention.Cdecl)]
-            private static unsafe extern void configure_rust_logging(IntPtr callback, byte min_level);
+            private static unsafe extern void configure_rust_logging(IntPtr callback, byte min_level, FFIBool ansi_enabled);
 
             // Constructor for a System.ArgumentException meant for use by Rust.
             // Defined here, because an exception from the C# Base Class Library cannot have custom constructors added.
@@ -864,7 +864,8 @@ namespace Cassandra
                     (IntPtr)UnauthorizedExceptionConstructorPtr
                 );
 
-                configure_rust_logging((IntPtr)RustLogCallbackPtr, GetRustMinLogLevel());
+                bool ansiEnabled = !Diagnostics.UseLoggerFactory;
+                configure_rust_logging((IntPtr)RustLogCallbackPtr, GetRustMinLogLevel(), ansiEnabled);
             }
         }
 

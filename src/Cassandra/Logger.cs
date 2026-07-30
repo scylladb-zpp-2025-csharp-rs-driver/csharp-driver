@@ -162,11 +162,28 @@ namespace Cassandra
         internal class TraceBasedLoggerHandler : ILoggerHandler
         {
             private const string DateFormat = "MM/dd/yyyy H:mm:ss.fff zzz";
+
+            // ANSI color codes for the level tag, matching the palette used by the Rust driver's
+            // own `tracing_subscriber` ANSI formatter (see rust/src/logging.rs), so that native C#
+            // log lines look consistent with Rust logs forwarded through the C#-Rust logging bridge.
+            // Note: Rust's TRACE and DEBUG levels are both coalesced into "Verbose" on the C# side
+            // (there's no separate C# level for them), so a single color is used for both.
+            private const string AnsiReset = "\x1b[0m";
+            private const string AnsiDimmed = "\x1b[2m";
+            private const string AnsiBold = "\x1b[1m";
+            private const string AnsiCyan = "\x1b[36m";
+            private const string AnsiError = "\x1b[31m"; // red, matches Rust's ERROR
+            private const string AnsiWarning = "\x1b[33m"; // yellow, matches Rust's WARN
+            private const string AnsiInfo = "\x1b[32m"; // green, matches Rust's INFO
+            private const string AnsiVerbose = "\x1b[34m"; // blue, matches Rust's DEBUG
+
             private readonly string _category;
 
             public TraceBasedLoggerHandler(Type type)
             {
-                _category = type.Name;
+                // Bold + cyan, so the source ("Rust"/"Cluster"/etc.) stands out from the
+                // (dimmed) timestamp and the (level-colored) level tag that follow it.
+                _category = $"{AnsiBold}{AnsiCyan}{type.Name}{AnsiReset}";
             }
 
             private static string PrintStackTrace(Exception ex)
@@ -211,7 +228,7 @@ namespace Cassandra
                     return;
                 }
                 Trace.WriteLine(
-                    string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), GetExceptionAndAllInnerEx(ex)), _category);
+                    string.Format("{0}{1}{2} {3}ERROR{4} {5}", AnsiDimmed, DateTimeOffset.Now.DateTime.ToString(DateFormat), AnsiReset, AnsiError, AnsiReset, GetExceptionAndAllInnerEx(ex)), _category);
             }
 
             public void Error(string msg, Exception ex = null)
@@ -221,7 +238,7 @@ namespace Cassandra
                     return;
                 }
                 Trace.WriteLine(
-                    string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat),
+                    string.Format("{0}{1}{2} {3}ERROR{4} {5}", AnsiDimmed, DateTimeOffset.Now.DateTime.ToString(DateFormat), AnsiReset, AnsiError, AnsiReset,
                         msg + (ex != null ? "\nEXCEPTION:\n " + GetExceptionAndAllInnerEx(ex) : string.Empty)), _category);
             }
 
@@ -235,7 +252,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} ERROR {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0}{1}{2} {3}ERROR{4} {5}", AnsiDimmed, DateTimeOffset.Now.DateTime.ToString(DateFormat), AnsiReset, AnsiError, AnsiReset, message), _category);
             }
 
             public void Warning(string message, params object[] args)
@@ -248,7 +265,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} WARNING {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0}{1}{2} {3}WARNING{4} {5}", AnsiDimmed, DateTimeOffset.Now.DateTime.ToString(DateFormat), AnsiReset, AnsiWarning, AnsiReset, message), _category);
             }
 
             public void Info(string message, params object[] args)
@@ -261,7 +278,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} INFO {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0}{1}{2} {3}INFO{4} {5}", AnsiDimmed, DateTimeOffset.Now.DateTime.ToString(DateFormat), AnsiReset, AnsiInfo, AnsiReset, message), _category);
             }
 
             public void Verbose(string message, params object[] args)
@@ -274,7 +291,7 @@ namespace Cassandra
                 {
                     message = string.Format(message, args);
                 }
-                Trace.WriteLine(string.Format("{0} VERBOSE {1}", DateTimeOffset.Now.DateTime.ToString(DateFormat), message), _category);
+                Trace.WriteLine(string.Format("{0}{1}{2} {3}VERBOSE{4} {5}", AnsiDimmed, DateTimeOffset.Now.DateTime.ToString(DateFormat), AnsiReset, AnsiVerbose, AnsiReset, message), _category);
             }
         }
     }

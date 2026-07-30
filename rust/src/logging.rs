@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Write};
 use std::sync::OnceLock;
 
-use crate::ffi::FFIStr;
+use crate::ffi::{FFIBool, FFIStr};
 use tracing::Level;
 use tracing::field::{Field, Visit};
 use tracing::span::Attributes;
@@ -15,6 +15,7 @@ type CSharpLogCallback = unsafe extern "C" fn(level: CsharpLogLevel, message: FF
 #[derive(Copy, Clone)]
 struct ProcessLogger {
     callback: CSharpLogCallback,
+    ansi_codes: AnsiCodes,
 }
 
 static LOGGER: OnceLock<ProcessLogger> = OnceLock::new();
@@ -25,8 +26,17 @@ fn logger() -> Option<&'static ProcessLogger> {
 }
 
 // Initializes the global logger with the provided C# callback.
-fn init_logger(callback: CSharpLogCallback) {
-    LOGGER.set(ProcessLogger { callback }).ok();
+fn init_logger(callback: CSharpLogCallback, ansi_enabled: bool) {
+    LOGGER
+        .set(ProcessLogger {
+            callback,
+            ansi_codes: if ansi_enabled {
+                AnsiCodes::ANSI
+            } else {
+                AnsiCodes::NO_ANSI
+            },
+        })
+        .ok();
 }
 
 /// This is equivalent of C# side Diagnostics.CassandraTraceSwitch.Level
@@ -64,20 +74,67 @@ impl From<CsharpLogLevel> for LevelFilter {
     }
 }
 
+// ANSI COLOR CODES
+//
+// Hardcoded to match the styling that tracing_subscriber's own ANSI formatter
+// uses (see `tracing-subscriber`'s `fmt::format::Pretty`/default formatter),
+// so Rust logs forwarded to C# keep a familiar look. Note that the log level
+// itself (TRACE/DEBUG/INFO/WARN/ERROR) is *not* colored here: that text is
+// added on the C# side (see RustBridge.cs/Logger.cs), which is also
+// responsible for coloring it.
+//
+// These are only ever written into a message when ANSI is enabled for the
+// process (see `ProcessLogger::ansi_enabled`); otherwise the plain (empty)
+// counterparts below are used, so no escape codes are generated at all.
+
+const ANSI_RESET: &str = "\x1b[0m";
+const ANSI_BOLD: &str = "\x1b[1m";
+const ANSI_DIMMED: &str = "\x1b[2m";
+const ANSI_ITALIC: &str = "\x1b[3m";
+
+const NO_ANSI_RESET: &str = "";
+const NO_ANSI_BOLD: &str = "";
+const NO_ANSI_DIMMED: &str = "";
+const NO_ANSI_ITALIC: &str = "";
+
+/// The set of formatting codes to use when building a forwarded log message.
+/// Either the real ANSI escape codes, or empty strings when ANSI is disabled.
+#[derive(Copy, Clone)]
+struct AnsiCodes {
+    reset: &'static str,
+    bold: &'static str,
+    dimmed: &'static str,
+    italic: &'static str,
+}
+
+impl AnsiCodes {
+    const NO_ANSI: Self = Self {
+        reset: NO_ANSI_RESET,
+        bold: NO_ANSI_BOLD,
+        dimmed: NO_ANSI_DIMMED,
+        italic: NO_ANSI_ITALIC,
+    };
+
+    const ANSI: Self = Self {
+        reset: ANSI_RESET,
+        bold: ANSI_BOLD,
+        dimmed: ANSI_DIMMED,
+        italic: ANSI_ITALIC,
+    };
+}
+
 /// Formats tracing span and event fields for the C# logger.
 struct FormattedFieldsVisitor {
     output: String,
     has_entry: bool,
-    field_separator: &'static str,
     message_field_name: Option<&'static str>,
 }
 
 impl FormattedFieldsVisitor {
-    fn new(field_separator: &'static str, message_field_name: Option<&'static str>) -> Self {
+    fn new(message_field_name: Option<&'static str>) -> Self {
         Self {
             output: String::new(),
             has_entry: false,
-            field_separator,
             message_field_name,
         }
     }
@@ -88,17 +145,22 @@ impl FormattedFieldsVisitor {
             .message_field_name
             .is_some_and(|message_field_name| field.name() == message_field_name);
 
-        let prefix = if self.has_entry { ", " } else { "" };
+        let prefix = if self.has_entry { " " } else { "" };
 
         if should_omit_name {
             // If this field is the "message" field, we omit the field name and separator to produce cleaner output.
             write!(self.output, "{prefix}{value:?}").unwrap();
         } else {
+            let AnsiCodes {
+                reset,
+                italic,
+                dimmed,
+                ..
+            } = LOGGER.get().map_or(AnsiCodes::NO_ANSI, |l| l.ansi_codes);
             write!(
                 self.output,
-                "{prefix}{}{}{:?}",
+                "{prefix}{italic}{}{reset}{dimmed}={reset}{:?}",
                 field.name(),
-                self.field_separator,
                 value
             )
             .unwrap();
@@ -138,7 +200,7 @@ where
             return;
         };
 
-        let mut visitor = FormattedFieldsVisitor::new("=", None);
+        let mut visitor = FormattedFieldsVisitor::new(None);
         attrs.record(&mut visitor);
         span.extensions_mut().insert(SpanFields(visitor.output));
     }
@@ -157,7 +219,15 @@ where
         let meta = event.metadata();
         let event_level = meta.level();
 
-        let mut visitor = FormattedFieldsVisitor::new(": ", Some("message"));
+        let codes = LOGGER.get().map_or(AnsiCodes::NO_ANSI, |l| l.ansi_codes);
+        let AnsiCodes {
+            reset,
+            bold,
+            dimmed,
+            ..
+        } = codes;
+
+        let mut visitor = FormattedFieldsVisitor::new(Some("message"));
         event.record(&mut visitor);
 
         let ffi_level = CsharpLogLevel::from(*event_level);
@@ -166,23 +236,23 @@ where
         if let Some(scope) = ctx.event_scope(event)
             && let Some(span) = scope.from_root().last()
         {
-            prefixed_message.push_str(span.name());
+            write!(prefixed_message, "{bold}{}{reset}", span.name()).unwrap();
 
             if let Some(fields) = span.extensions().get::<SpanFields>()
                 && !fields.0.is_empty()
             {
-                prefixed_message.push('{');
-                prefixed_message.push_str(&fields.0);
-                prefixed_message.push('}');
+                write!(
+                    prefixed_message,
+                    "{bold}{{{reset}{}{bold}}}{reset}",
+                    fields.0
+                )
+                .unwrap();
             }
 
-            prefixed_message.push_str(": ");
+            write!(prefixed_message, "{dimmed}: {reset}").unwrap();
         }
 
-        prefixed_message.push('[');
-        prefixed_message.push_str(meta.target());
-        prefixed_message.push(']');
-        prefixed_message.push(' ');
+        write!(prefixed_message, "{dimmed}[{}]{reset} ", meta.target()).unwrap();
 
         prefixed_message.push_str(&visitor.output);
 
@@ -195,11 +265,18 @@ where
 /// Must be called at least once before any logging is performed;
 /// otherwise, no log output will be produced.
 /// Subsequent calls are no-ops.
+///
+/// `ansi_enabled` controls whether forwarded messages are annotated with ANSI
+/// escape codes - should be `true` only for the default Trace-based console/trace-listener path.
 #[unsafe(no_mangle)]
-pub extern "C" fn configure_rust_logging(callback: CSharpLogCallback, min_level: CsharpLogLevel) {
+pub extern "C" fn configure_rust_logging(
+    callback: CSharpLogCallback,
+    min_level: CsharpLogLevel,
+    ansi_enabled: FFIBool,
+) {
     static INIT: std::sync::Once = std::sync::Once::new();
     INIT.call_once(|| {
-        init_logger(callback);
+        init_logger(callback, ansi_enabled.into());
 
         tracing::subscriber::set_global_default(
             tracing_subscriber::registry()
