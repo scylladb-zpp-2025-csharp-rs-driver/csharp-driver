@@ -65,6 +65,25 @@ impl FFIMaybeException {
     }
 }
 
+/// Layout descriptions for the FFI structs defined in this module. See [`crate::abi`].
+#[cfg(any(feature = "integration_testing", test))]
+pub(crate) mod abi {
+    use super::{FFIException, FFIMaybeException};
+    use crate::abi::{AbiType, abi_type};
+
+    pub(crate) const TYPES: &[AbiType] = &[
+        // C# has no FFIException struct of its own - Rust's FFIException is a `repr(transparent)`
+        // newtype over FFIGCHandle, and C# receives it as a bare FFIGCHandle. Only size and
+        // alignment are described here; the per-field check lives on the FFIGCHandle entry.
+        abi_type!("FFIException", FFIException),
+        abi_type!(
+            "FFIMaybeException",
+            FFIMaybeException,
+            "maybeException" => 0,
+        ),
+    ];
+}
+
 #[repr(transparent)]
 pub struct RustExceptionConstructor(unsafe extern "C" fn(message: FFIStr<'_>) -> FFIException);
 
@@ -160,7 +179,9 @@ pub struct RequestInvalidExceptionConstructor(
 );
 
 impl RequestInvalidExceptionConstructor {
-    #[expect(dead_code)] // Currently unused
+    // Not yet reached by any production error mapping, but exercised across the boundary by
+    // the constructor-table test, which drives every slot.
+    #[cfg_attr(not(feature = "integration_testing"), expect(dead_code))]
     pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }
@@ -264,7 +285,9 @@ pub struct TraceRetrievalExceptionConstructor(
 );
 
 impl TraceRetrievalExceptionConstructor {
-    #[expect(dead_code)] // Currently unused
+    // Not yet reached by any production error mapping, but exercised across the boundary by
+    // the constructor-table test, which drives every slot.
+    #[cfg_attr(not(feature = "integration_testing"), expect(dead_code))]
     pub(crate) fn construct_from_rust(&self, message: &str) -> FFIException {
         let message = FFIStr::new(message);
         unsafe { (self.0)(message) }

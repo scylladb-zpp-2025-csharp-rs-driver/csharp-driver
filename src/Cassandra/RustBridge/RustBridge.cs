@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
+using System.Threading;
 using System.Threading.Tasks;
 
 /* PInvoke has an overhead of between 10 and 30 x86 instructions per call.
@@ -15,6 +16,43 @@ namespace Cassandra
 {
     static class RustBridge
     {
+        /// <summary>
+        /// Counts the GCHandles this bridge has handed to Rust and not yet reclaimed.
+        /// </summary>
+        /// <remarks>
+        /// <para>
+        /// Every managed object that crosses into Rust does so as a GCHandle wrapped in
+        /// <see cref="FFIGCHandle"/> or <see cref="FFIMaybeGCHandle"/>, and Rust is responsible for
+        /// releasing it (directly, or by handing it back through a completion or exception callback).
+        /// A missed release leaks the object for the lifetime of the process.
+        /// </para>
+        /// <para>
+        /// Such a leak is invisible to every general-purpose tool. LeakSanitizer cannot see it,
+        /// because a leaked handle keeps its target <em>reachable</em> from the CLR's handle table -
+        /// by LSAN's definition nothing has leaked. Nor can a weak-reference-plus-GC.Collect probe
+        /// prove the negative reliably: whether an unrooted local is actually collectable depends on
+        /// JIT tier and debug codegen, so such tests are flaky in exactly the direction that hides
+        /// bugs. Counting the handles is the only deterministic answer.
+        /// </para>
+        /// <para>
+        /// Accounting lives in the two struct constructors rather than at the ~25 call sites, so it
+        /// cannot be forgotten when a new exception constructor is added. Cost is one interlocked
+        /// increment next to a <see cref="GCHandle.Alloc(object)"/> that already takes a runtime
+        /// lock.
+        /// </para>
+        /// </remarks>
+        internal static class HandleAccounting
+        {
+            private static long _live;
+
+            /// <summary>Handles currently held by Rust. Should return to its baseline once idle.</summary>
+            internal static long Live => Interlocked.Read(ref _live);
+
+            internal static void Allocated() => Interlocked.Increment(ref _live);
+
+            internal static void Released() => Interlocked.Decrement(ref _live);
+        }
+
         /// <summary>
         /// Struct used to pass a GCHandle along with its destructor function pointer.
         /// This is used to transfer ownership of GCHandles to Rust code.
@@ -33,6 +71,10 @@ namespace Cassandra
                 {
                     free = (IntPtr)freeGCHandleDel;
                 }
+
+                // Wrapping a GCHandle in this struct is what hands it to Rust. Counting here, rather
+                // than at each allocation site, means a new caller cannot forget to account for it.
+                HandleAccounting.Allocated();
             }
 
             internal unsafe readonly static delegate* unmanaged[Cdecl]<IntPtr, void> freeGCHandleDel = &FreeGCHandle;
@@ -44,6 +86,7 @@ namespace Cassandra
                 if (handle.IsAllocated)
                 {
                     handle.Free();
+                    HandleAccounting.Released();
                 }
             }
         }
@@ -66,6 +109,10 @@ namespace Cassandra
                 {
                     free = (IntPtr)freeGCHandleDel;
                 }
+
+                // Wrapping a GCHandle in this struct is what hands it to Rust. Counting here, rather
+                // than at each allocation site, means a new caller cannot forget to account for it.
+                HandleAccounting.Allocated();
             }
 
             // Intended just for null instantiation using `empty()`.
@@ -94,6 +141,7 @@ namespace Cassandra
                 if (handle.IsAllocated)
                 {
                     handle.Free();
+                    HandleAccounting.Released();
                 }
             }
         }
@@ -559,6 +607,7 @@ namespace Cassandra
                             // Free the handle so the TCS can be collected once no longer used
                             // by the C# code.
                             handle.Free();
+                            HandleAccounting.Released();
                         }
                     }
                 }
@@ -612,6 +661,7 @@ namespace Cassandra
                                     if (exHandle.IsAllocated)
                                     {
                                         exHandle.Free();
+                                        HandleAccounting.Released();
                                     }
                                 }
                             }
@@ -634,6 +684,7 @@ namespace Cassandra
                         if (handle.IsAllocated)
                         {
                             handle.Free();
+                            HandleAccounting.Released();
                         }
                     }
                 }
@@ -837,7 +888,10 @@ namespace Cassandra
             static Globals()
             {
                 // Intentionally never freed: this is a single, process-lifetime constructors table
-                ConstructorsPtr = (Constructors*)NativeMemory.Alloc((nuint)sizeof(Constructors));
+                // AllocZeroed, not Alloc: if a field of Constructors is ever left unassigned, a zeroed
+                // allocation makes it a null pointer that EveryConstructorPointer_IsNonNull catches,
+                // rather than uninitialised garbage that happens to look like a valid callback.
+                ConstructorsPtr = (Constructors*)NativeMemory.AllocZeroed((nuint)sizeof(Constructors));
                 *ConstructorsPtr = new Constructors(
                     (IntPtr)AlreadyExistsConstructorPtr,
                     (IntPtr)AlreadyShutdownExceptionConstructorPtr,
@@ -937,6 +991,7 @@ namespace Cassandra
                 if (exHandle.IsAllocated)
                 {
                     exHandle.Free();
+                    HandleAccounting.Released();
                 }
                 // Zero out the pointer to avoid double free if caller invokes FreeIfPresent
                 res.maybeException = FFIMaybeGCHandle.Empty();
@@ -960,6 +1015,7 @@ namespace Cassandra
                 if (exHandle.IsAllocated)
                 {
                     exHandle.Free();
+                    HandleAccounting.Released();
                 }
             }
             finally

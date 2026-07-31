@@ -582,6 +582,48 @@ pub mod blittable {
 
 pub use blittable::Blittable;
 
+/// Layout descriptions for the FFI structs defined in this module. See [`crate::abi`].
+#[cfg(any(feature = "integration_testing", test))]
+pub(crate) mod abi {
+    use super::{FFIBool, FFIGCHandle, FFIMaybeGCHandle, FFISlice, FFIStr};
+    use crate::abi::{AbiType, abi_type};
+
+    /// Stand-in for the managed payload type of the generic handle structs. Only its layout
+    /// contribution matters, which is none - the handles are a pointer plus a function pointer
+    /// regardless of `T`.
+    enum AbiProbe {}
+
+    pub(crate) const TYPES: &[AbiType] = &[
+        abi_type!(
+            "FFIGCHandle",
+            FFIGCHandle<AbiProbe>,
+            "gchandle" => gchandle,
+            "free" => free,
+        ),
+        abi_type!(
+            "FFIMaybeGCHandle",
+            FFIMaybeGCHandle<AbiProbe>,
+            "gchandle" => gchandle,
+            "free" => free,
+        ),
+        abi_type!(
+            "FFISlice",
+            FFISlice<'static, u8>,
+            "ptr" => ptr,
+            "len" => len,
+        ),
+        // C# flattens this newtype into a (ptr, len) struct called FFIString, so describe it the
+        // way the managed side declares it rather than as the single `slice` field Rust sees.
+        abi_type!(
+            "FFIString",
+            FFIStr<'static>,
+            "ptr" => slice.ptr,
+            "len" => slice.len,
+        ),
+        abi_type!("FFIBool", FFIBool, "value" => value),
+    ];
+}
+
 mod tests {
     /// ```compile_fail,E0499
     /// # use csharp_wrapper::ffi::{BridgedOwnedExclusivePtr, BridgedBorrowedExclusivePtr, FFI, BoxFFI, FromBox};
@@ -757,6 +799,18 @@ impl<'a> FFIStr<'a> {
                 len: 0,
             },
         }
+    }
+
+    /// Views the underlying UTF-8 bytes.
+    ///
+    /// `FFIStr` is normally a write-only, Rust-to-C# type, so this exists for the few places that
+    /// receive one coming the other way (currently only the test exports, which echo managed strings
+    /// back). Note that this returns the bytes, not a `&str`: validating UTF-8 is the caller's
+    /// decision, since a malformed string arriving from C# is a contract violation rather than
+    /// something to silently paper over.
+    #[cfg(any(feature = "integration_testing", test))]
+    pub(crate) fn as_bytes(&self) -> &[u8] {
+        self.slice.as_slice()
     }
 }
 
@@ -1006,7 +1060,8 @@ impl<T> FFIMaybeGCHandle<T> {
     /// Borrows the GCHandle, for use by C#.
     /// Borrow checker prevents use-after-free, ensuring that FFIGCHandle
     /// is kept alive.
-    #[expect(dead_code)] // Will be used soon.
+    // Exercised by the runtime FFI tests; still unused in the production (non-test) build.
+    #[cfg_attr(not(test), expect(dead_code))] // Will be used soon.
     pub(crate) fn borrow<'gc>(&'gc self) -> Option<GCHandlePtr<'gc, T>> {
         self.gchandle
             .as_ref()
@@ -1050,5 +1105,349 @@ impl<T> Drop for FFIMaybeGCHandle<T> {
                 (free)(GCHandlePtr(gchandle.0));
             }
         }
+    }
+}
+
+// Runtime unit tests for the FFI abstractions.
+//
+// These complement the `compile_fail` doctests above (which prove the borrow-checker invariants) by
+// asserting the *runtime* behaviour the type system cannot: that ownership transfers free memory
+// exactly once, that reference counts move as intended, and that the handle wrappers call their
+// destructor callback precisely when they should.
+//
+// Deliberately absent are assertions that `Box::into_raw` / `Arc::as_ptr` / `slice::as_ptr` return
+// the address they were handed. That is std's contract, not this module's, and testing it only
+// creates edits to make whenever the wrappers are refactored. Where an address does matter it is
+// asserted as part of a behavioural test (see `arc_ffi_cloned_from_ptr_shares_the_allocation`).
+//
+// Run under ASAN (`make test-rust-asan`) these additionally prove there is no leak, no double-free
+// and no use-after-free on any of these paths.
+#[cfg(test)]
+mod runtime_tests {
+    use super::*;
+    use std::cell::Cell;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    // A trivial Box-backed FFI type.
+    struct BoxThing {
+        value: u64,
+    }
+    impl FFI for BoxThing {
+        type Origin = FromBox;
+    }
+
+    // A trivial Arc-backed FFI type.
+    struct ArcThing {
+        value: u64,
+    }
+    impl FFI for ArcThing {
+        type Origin = FromArc;
+    }
+
+    // A Ref-backed FFI type (lifetime bound to an owner).
+    struct RefThing {
+        value: u64,
+    }
+    impl FFI for RefThing {
+        type Origin = FromRef;
+    }
+
+    // Counts drops so we can assert a value is freed exactly once (no leak, no double-free).
+    struct DropCounter<'a>(&'a AtomicUsize);
+    impl FFI for DropCounter<'_> {
+        type Origin = FromBox;
+    }
+    impl Drop for DropCounter<'_> {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn box_ffi_round_trip_preserves_the_payload() {
+        let ptr = BoxFFI::into_ptr(Box::new(BoxThing { value: 7 }));
+        let reclaimed = BoxFFI::from_ptr(ptr).expect("non-null");
+        assert_eq!(reclaimed.value, 7);
+    }
+
+    #[test]
+    fn box_ffi_mutation_through_exclusive_borrow_is_visible() {
+        let mut ptr = BoxFFI::into_ptr(Box::new(BoxThing { value: 1 }));
+
+        // Mutate through a borrowed exclusive pointer...
+        BoxFFI::as_mut_ref(ptr.borrow_mut())
+            .expect("non-null")
+            .value = 99;
+
+        // ...and observe it through an immutable reborrow of the same pointer.
+        assert_eq!(BoxFFI::as_ref(ptr.borrow()).map(|r| r.value), Some(99));
+
+        BoxFFI::free(ptr);
+    }
+
+    #[test]
+    fn box_ffi_free_drops_exactly_once() {
+        let counter = AtomicUsize::new(0);
+        let ptr = BoxFFI::into_ptr(Box::new(DropCounter(&counter)));
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            0,
+            "must not drop while owned as a pointer"
+        );
+
+        BoxFFI::free(ptr);
+        assert_eq!(
+            counter.load(Ordering::SeqCst),
+            1,
+            "free must drop exactly once"
+        );
+    }
+
+    #[test]
+    fn arc_ffi_round_trip_preserves_the_payload_and_refcount() {
+        let ptr = ArcFFI::into_ptr(Arc::new(ArcThing { value: 5 }));
+        let reclaimed = ArcFFI::from_ptr(ptr).expect("non-null");
+        assert_eq!(reclaimed.value, 5);
+        assert_eq!(
+            Arc::strong_count(&reclaimed),
+            1,
+            "into_ptr/from_ptr must move the single owning reference, not add one"
+        );
+    }
+
+    #[test]
+    fn arc_ffi_as_ptr_only_borrows() {
+        let arc = Arc::new(ArcThing { value: 8 });
+        let _ptr = ArcFFI::as_ptr(&arc);
+        assert_eq!(
+            Arc::strong_count(&arc),
+            1,
+            "as_ptr must not take an owning reference"
+        );
+    }
+
+    #[test]
+    fn arc_ffi_cloned_from_ptr_shares_the_allocation() {
+        let arc = Arc::new(ArcThing { value: 3 });
+        let borrowed = ArcFFI::as_ptr(&arc);
+
+        let cloned = ArcFFI::cloned_from_ptr(borrowed).expect("non-null");
+        assert_eq!(
+            Arc::strong_count(&arc),
+            2,
+            "cloned_from_ptr must bump the refcount"
+        );
+        // Same allocation, not a copy: this is the property C# relies on when it clones a handle.
+        assert!(std::ptr::eq(Arc::as_ptr(&cloned), Arc::as_ptr(&arc)));
+        assert_eq!(cloned.value, 3);
+
+        drop(cloned);
+        assert_eq!(Arc::strong_count(&arc), 1);
+    }
+
+    #[test]
+    fn arc_ffi_free_decrements_strong_count() {
+        let arc = Arc::new(ArcThing { value: 2 });
+        // Simulate handing an owned pointer to C# (into_ptr consumes one owning reference).
+        let owned_ptr = ArcFFI::into_ptr(Arc::clone(&arc));
+        assert_eq!(Arc::strong_count(&arc), 2);
+
+        ArcFFI::free(owned_ptr);
+        assert_eq!(
+            Arc::strong_count(&arc),
+            1,
+            "free must drop one owning reference"
+        );
+    }
+
+    #[test]
+    fn ref_ffi_as_ptr_yields_a_usable_reference() {
+        let thing = RefThing { value: 11 };
+        let ptr = RefFFI::as_ptr(&thing);
+        assert_eq!(RefFFI::as_ref(ptr).map(|r| r.value), Some(11));
+    }
+
+    #[test]
+    fn ref_ffi_weak_as_ptr_is_null_after_owner_dropped() {
+        let arc = Arc::new(RefThing { value: 4 });
+        let weak = Arc::downgrade(&arc);
+
+        // While the owner is alive, the pointer is non-null.
+        // SAFETY: `arc` is alive for the duration of this borrow.
+        let live = unsafe { RefFFI::weak_as_ptr(&weak) };
+        assert!(!live.is_null());
+
+        drop(arc);
+        // Once the owner is gone, weak_as_ptr yields null instead of a dangling pointer.
+        // SAFETY: no dereference occurs; we only inspect nullness.
+        let dead = unsafe { RefFFI::weak_as_ptr(&weak) };
+        assert!(dead.is_null());
+    }
+
+    #[test]
+    fn ffi_slice_is_zero_copy() {
+        let data = [10u32, 20, 30, 40];
+        let slice = FFISlice::new(&data);
+        let out = slice.as_slice();
+        // Same backing storage - C#'s `ToSpan()` aliases Rust memory, and that only holds if this does.
+        assert!(std::ptr::eq(out.as_ptr(), data.as_ptr()));
+        assert_eq!(out, &data);
+    }
+
+    #[test]
+    fn ffi_slice_empty_is_empty() {
+        let data: [u8; 0] = [];
+        assert_eq!(FFISlice::new(&data).as_slice(), &[] as &[u8]);
+    }
+
+    #[test]
+    fn ffi_str_is_byte_accurate() {
+        // Multi-byte, plus an interior NUL: a length-honouring bridge keeps every byte.
+        let s = "h\u{e9}llo\0world";
+        assert_eq!(FFIStr::new(s).slice.as_slice(), s.as_bytes());
+    }
+
+    #[test]
+    fn ffi_str_null_is_distinct_from_empty() {
+        let null = FFIStr::null();
+        assert!(null.slice.ptr.is_null());
+
+        // An empty string still has a non-null pointer, so C# can tell the two apart.
+        assert!(!FFIStr::new("").slice.ptr.is_null());
+    }
+
+    #[test]
+    fn ffi_bool_uses_exact_wire_bytes() {
+        // C# declares this as a single `byte`, so the values 0 and 1 are part of the ABI.
+        assert_eq!(FFIBool::from(true).value, 1);
+        assert_eq!(FFIBool::from(false).value, 0);
+        assert!(bool::from(FFIBool::from(true)));
+        assert!(!bool::from(FFIBool::from(false)));
+    }
+
+    // The GCHandle wrappers take a bare `extern "C" fn(GCHandlePtr<T>)` with no context parameter,
+    // so a test callback has nowhere to put per-test state except a thread-local. That is also what
+    // makes these tests safe to run in parallel: cargo gives each test its own thread, whereas the
+    // process-global counters this replaced raced with each other (~3 failures in 40 runs).
+    thread_local! {
+        static FREE_CALLS: Cell<usize> = const { Cell::new(0) };
+        static LAST_FREED_ADDR: Cell<usize> = const { Cell::new(0) };
+    }
+
+    extern "C" fn record_free<T>(handle: GCHandlePtr<T>) {
+        FREE_CALLS.set(FREE_CALLS.get() + 1);
+        LAST_FREED_ADDR.set(handle.0.ptr.as_ptr() as usize);
+    }
+
+    fn free_calls() -> usize {
+        FREE_CALLS.get()
+    }
+
+    // Builds a GCHandlePtr from a `'static` anchor. In production the pointee is a C# GCHandle; any
+    // stable non-null address works here because `record_free` never dereferences it. Callers pass a
+    // `static`, which yields a genuine `'static` borrow - no lifetime transmute, and nothing leaked
+    // for ASAN to report.
+    fn make_gchandle_ptr<T: 'static>(anchor: &'static T) -> GCHandlePtr<'static, T> {
+        GCHandlePtr(FFINonNullPtr::from_ref(anchor))
+    }
+
+    #[test]
+    fn ffi_gc_handle_drop_calls_free_once_with_stored_address() {
+        static ANCHOR: u8 = 0;
+        let expected_addr = &ANCHOR as *const u8 as usize;
+
+        {
+            let handle = FFIGCHandle {
+                gchandle: make_gchandle_ptr(&ANCHOR),
+                free: record_free::<u8>,
+            };
+            // Borrowing must not free.
+            let _ = handle.borrow();
+            assert_eq!(free_calls(), 0);
+        } // drop here
+
+        assert_eq!(free_calls(), 1, "Drop must free exactly once");
+        assert_eq!(LAST_FREED_ADDR.get(), expected_addr);
+    }
+
+    // The single most load-bearing test in this module: both conversions `std::mem::forget` the
+    // source so ownership of the GCHandle moves rather than being duplicated. Drop either `forget`
+    // and this turns into a double-free (or, with the ownership reversed, a leak) - which nothing
+    // else here would notice.
+    #[test]
+    fn ffi_gc_handle_into_maybe_and_back_frees_once() {
+        static ANCHOR: u16 = 0;
+
+        let handle = FFIGCHandle {
+            gchandle: make_gchandle_ptr(&ANCHOR),
+            free: record_free::<u16>,
+        };
+
+        let maybe = handle.into_ffi_maybe_gc_handle();
+        assert_eq!(free_calls(), 0, "ownership transfer must not free");
+        assert!(!maybe.is_empty());
+
+        let back = maybe.try_into_ffi_gc_handle().expect("was non-empty");
+        assert_eq!(free_calls(), 0, "converting back must not free either");
+
+        drop(back);
+        assert_eq!(
+            free_calls(),
+            1,
+            "exactly one free after the full round trip"
+        );
+    }
+
+    #[test]
+    fn ffi_maybe_gc_handle_empty_does_not_free() {
+        let empty: FFIMaybeGCHandle<u8> = FFIMaybeGCHandle::empty();
+        assert!(empty.is_empty());
+        assert!(empty.borrow().is_none());
+        assert!(empty.try_into_ffi_gc_handle().is_none());
+        assert_eq!(free_calls(), 0, "empty handle must never call free");
+    }
+
+    #[test]
+    fn ffi_maybe_gc_handle_drop_frees_once() {
+        static ANCHOR: u32 = 0;
+        {
+            let _maybe = FFIMaybeGCHandle {
+                gchandle: Some(make_gchandle_ptr(&ANCHOR)),
+                free: Some(record_free::<u32>),
+            };
+        }
+        assert_eq!(free_calls(), 1);
+    }
+}
+
+// Positive controls for the sanitizer build.
+//
+// A green AddressSanitizer run is only meaningful if the sanitizer was actually armed - and it is
+// easy for it not to be, since it depends on RUSTFLAGS reaching the right compilation units. These
+// two tests contain real defects: if `make test-rust-asan-selftest` does not see ASAN report them,
+// the sanitizer is not instrumenting this crate and every clean run should be distrusted.
+//
+// They are `#[ignore]`d so that an ordinary `cargo test` never executes them. Outside a sanitizer
+// build the first one is plain undefined behaviour, so the make target is the only correct way to
+// run them.
+#[cfg(test)]
+mod asan_selftest {
+    #[test]
+    #[ignore = "deliberate use-after-free; run only under ASAN via `make test-rust-asan-selftest`"]
+    fn deliberate_use_after_free() {
+        let raw = Box::into_raw(Box::new(0xAAu8));
+        // SAFETY: none. That is the point - ASAN must abort on the read below.
+        unsafe {
+            drop(Box::from_raw(raw));
+            let value = std::ptr::read_volatile(raw);
+            println!("read {value} after free - ASAN is NOT armed");
+        }
+    }
+
+    #[test]
+    #[ignore = "deliberate leak; run only under ASAN via `make test-rust-asan-selftest`"]
+    fn deliberate_leak() {
+        let leaked = Box::leak(Box::new([0u8; 4096]));
+        std::hint::black_box(leaked.as_ptr());
     }
 }

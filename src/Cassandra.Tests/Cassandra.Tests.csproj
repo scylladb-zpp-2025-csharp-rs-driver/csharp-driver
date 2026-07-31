@@ -11,7 +11,10 @@
     <SignAssembly>true</SignAssembly>
     <PackageId>Cassandra.Tests</PackageId>
     <GenerateRuntimeConfigurationFiles>true</GenerateRuntimeConfigurationFiles>
-    <LangVersion>9.0</LangVersion>
+    <LangVersion>12.0</LangVersion>
+    <!-- Required by the RustBridge FFI unit tests, which build FFI structs and
+         invoke [UnmanagedCallersOnly] callbacks via function pointers. -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   <PropertyGroup Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('$(TargetFramework)', '^net\d$'))">
     <DefineConstants>$(DefineConstants);NETCOREAPP</DefineConstants>
