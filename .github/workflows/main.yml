@@ -50,6 +50,16 @@ jobs:
       - name: Run static checks (checks formatting, linting and performs code analysis)
         run: make check
 
+      # # The Rust unit tests and doctests previously ran nowhere in CI, so the FFI layer's own tests -
+      # # including the compile_fail doctests that prove its borrow-checker invariants - could rot
+      # # unnoticed.
+      # - name: Run Rust unit tests and doctests
+      #   run: make test-rust
+
+      # # The test-only FFI exports must not be reachable from a shippable build.
+      # - name: Check the default build exports no test-only symbols
+      #   run: make check-no-test-exports
+
       - name: Copy development signing key
         run: "cp -f build/scylladb-dev.snk build/scylladb.snk"
 
@@ -58,6 +68,32 @@ jobs:
 
       - name: Run unit tests
         run: TARGET_FRAMEWORK=net9 make test-unit
+
+  #     # Same suite under a hostile GC (tiny gen0, frequent compaction, no tiered JIT). Any managed
+  #     # buffer handed to Rust without being pinned is far likelier to be caught here.
+  #     - name: Run unit tests under GC stress
+  #       run: TARGET_FRAMEWORK=net9 make test-unit-gcstress
+
+  # sanitizers:
+  #   runs-on: ubuntu-24.04
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+
+  #     - name: Install the nightly toolchain
+  #       run: rustup toolchain install nightly --component rust-src,miri
+
+  #     # Runs first, deliberately. It asserts that ASAN reports two real defects planted for the
+  #     # purpose, so a green sanitizer run below cannot be confused with the sanitizer being disabled.
+  #     - name: Check the sanitizer is armed
+  #       run: make test-rust-asan-selftest
+
+  #     - name: Run Rust unit tests under AddressSanitizer and LeakSanitizer
+  #       run: make test-rust-asan
+
+  #     # Catches the aliasing and pointer-provenance violations ASAN structurally cannot see.
+  #     - name: Run Rust unit tests under Miri
+  #       run: make test-rust-miri
 
   integration-tests:
     needs: linting-and-basic-unit-tests

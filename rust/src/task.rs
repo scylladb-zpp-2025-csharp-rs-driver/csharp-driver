@@ -160,37 +160,62 @@ pub struct Tcb<R> {
     pub(crate) constructors: &'static ExceptionConstructors,
 }
 
-/// Collection of exception constructors passed from C#.
-/// This struct holds function pointers to create various exception types.
-/// Any changes here must be mirrored on the C# side in the exact same order (alphabetical).
-#[repr(C)]
-pub struct ExceptionConstructors {
-    pub already_exists_constructor: AlreadyExistsConstructor,
-    pub already_shutdown_exception_constructor: AlreadyShutdownExceptionConstructor,
-    pub argument_exception_constructor: ArgumentExceptionConstructor,
-    pub deserialization_exception_constructor: DeserializationExceptionConstructor,
-    pub function_failure_exception_constructor: FunctionFailureExceptionConstructor,
-    pub invalid_argument_exception_constructor: InvalidArgumentExceptionConstructor,
-    pub invalid_configuration_in_query_constructor: InvalidConfigurationInQueryExceptionConstructor,
-    pub invalid_query_constructor: InvalidQueryConstructor,
-    pub invalid_type_exception_constructor: InvalidTypeExceptionConstructor,
-    pub no_host_available_exception_constructor: NoHostAvailableExceptionConstructor,
-    pub operation_timed_out_exception_constructor: OperationTimedOutExceptionConstructor,
-    pub prepared_query_not_found_exception_constructor: PreparedQueryNotFoundExceptionConstructor,
-    pub request_invalid_exception_constructor: RequestInvalidExceptionConstructor,
-    pub rust_exception_constructor: RustExceptionConstructor,
-    pub schema_agreement_required_host_absent_exception_constructor:
+/// Declares [`ExceptionConstructors`] together with a machine-readable description of its layout.
+///
+/// The field list is given exactly once. Besides the struct, the macro emits
+/// `CONSTRUCTOR_ABI_FIELDS`, which the `ffi_test_abi_manifest` export streams to the managed test
+/// suite so that every slot's offset is compared against C#'s `Constructors` struct by name. Adding
+/// an exception type therefore means editing this one list; if the C# side is not updated to match,
+/// `AbiLayoutTests` fails and names the missing field.
+macro_rules! exception_constructors {
+    ( $( $field:ident : $ty:ty ),+ $(,)? ) => {
+        /// Collection of exception constructors passed from C#.
+        /// This struct holds function pointers to create various exception types.
+        /// Any changes here must be mirrored on the C# side in the exact same order (alphabetical).
+        #[repr(C)]
+        pub struct ExceptionConstructors {
+            $( pub $field: $ty, )+
+        }
+
+        #[cfg(any(feature = "integration_testing", test))]
+        pub(crate) const CONSTRUCTOR_ABI_FIELDS: &[crate::abi::AbiField] = &[
+            $(
+                crate::abi::AbiField {
+                    name: stringify!($field),
+                    offset: ::std::mem::offset_of!(ExceptionConstructors, $field),
+                }
+            ),+
+        ];
+    };
+}
+
+exception_constructors! {
+    already_exists_constructor: AlreadyExistsConstructor,
+    already_shutdown_exception_constructor: AlreadyShutdownExceptionConstructor,
+    argument_exception_constructor: ArgumentExceptionConstructor,
+    deserialization_exception_constructor: DeserializationExceptionConstructor,
+    function_failure_exception_constructor: FunctionFailureExceptionConstructor,
+    invalid_argument_exception_constructor: InvalidArgumentExceptionConstructor,
+    invalid_configuration_in_query_constructor: InvalidConfigurationInQueryExceptionConstructor,
+    invalid_query_constructor: InvalidQueryConstructor,
+    invalid_type_exception_constructor: InvalidTypeExceptionConstructor,
+    no_host_available_exception_constructor: NoHostAvailableExceptionConstructor,
+    operation_timed_out_exception_constructor: OperationTimedOutExceptionConstructor,
+    prepared_query_not_found_exception_constructor: PreparedQueryNotFoundExceptionConstructor,
+    request_invalid_exception_constructor: RequestInvalidExceptionConstructor,
+    rust_exception_constructor: RustExceptionConstructor,
+    schema_agreement_required_host_absent_exception_constructor:
         SchemaAgreementRequiredHostAbsentExceptionConstructor,
-    pub schema_agreement_rows_result_exception_constructor:
+    schema_agreement_rows_result_exception_constructor:
         SchemaAgreementRowsResultExceptionConstructor,
-    pub schema_agreement_single_row_exception_constructor:
+    schema_agreement_single_row_exception_constructor:
         SchemaAgreementSingleRowExceptionConstructor,
-    pub schema_agreement_timeout_exception_constructor: SchemaAgreementTimeoutExceptionConstructor,
-    pub serialization_exception_constructor: SerializationExceptionConstructor,
-    pub syntax_error_exception_constructor: SyntaxErrorExceptionConstructor,
-    pub trace_retrieval_exception_constructor: TraceRetrievalExceptionConstructor,
-    pub truncate_exception_constructor: TruncateExceptionConstructor,
-    pub unauthorized_exception_constructor: UnauthorizedExceptionConstructor,
+    schema_agreement_timeout_exception_constructor: SchemaAgreementTimeoutExceptionConstructor,
+    serialization_exception_constructor: SerializationExceptionConstructor,
+    syntax_error_exception_constructor: SyntaxErrorExceptionConstructor,
+    trace_retrieval_exception_constructor: TraceRetrievalExceptionConstructor,
+    truncate_exception_constructor: TruncateExceptionConstructor,
+    unauthorized_exception_constructor: UnauthorizedExceptionConstructor,
 }
 
 impl<R> Tcb<R> {
@@ -284,5 +309,105 @@ impl BridgedFuture {
     #[expect(dead_code)] // <- currently unused
     pub(crate) fn block_on<T>(future: impl Future<Output = T>) -> T {
         RUNTIME.block_on(future)
+    }
+
+    /// Spawns a future on the shared runtime and forgets about it.
+    ///
+    /// Test-only. Production code goes through [`BridgedFuture::spawn`], which additionally
+    /// translates results and panics into TCB callbacks; the test exports need to drive the
+    /// completion callbacks directly from a worker thread without that translation.
+    #[cfg(any(feature = "integration_testing", test))]
+    pub(crate) fn spawn_detached<F>(future: F)
+    where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        RUNTIME.spawn(future);
+    }
+}
+
+/// Layout descriptions for the FFI structs defined in this module. See [`crate::abi`].
+#[cfg(any(feature = "integration_testing", test))]
+pub(crate) mod abi {
+    use super::{
+        CONSTRUCTOR_ABI_FIELDS, EmptyAsyncResult, ExceptionConstructors, ManuallyDestructible, Tcb,
+    };
+    use crate::abi::{AbiType, abi_type};
+    use crate::ffi::FFIBool;
+
+    pub(crate) const TYPES: &[AbiType] = &[
+        AbiType {
+            name: "Constructors",
+            size: std::mem::size_of::<ExceptionConstructors>(),
+            align: std::mem::align_of::<ExceptionConstructors>(),
+            fields: CONSTRUCTOR_ABI_FIELDS,
+        },
+        // `Tcb`'s layout does not depend on `R`: the result type only appears behind pointers and in
+        // function-pointer signatures. Any concrete instantiation therefore describes them all.
+        abi_type!(
+            "Tcb",
+            Tcb<FFIBool>,
+            "tcs" => tcs,
+            "complete_task" => complete_task,
+            "fail_task" => fail_task,
+            "constructors" => constructors,
+        ),
+        // The managed field names are capitalised, unlike the Rust ones.
+        abi_type!(
+            "ManuallyDestructible",
+            ManuallyDestructible,
+            "Ptr" => ptr,
+            "Destructor" => destructor,
+        ),
+        abi_type!("EmptyAsyncResult", EmptyAsyncResult, "_dummy" => _dummy),
+    ];
+}
+
+#[cfg(test)]
+mod layout_tests {
+    use super::{CONSTRUCTOR_ABI_FIELDS, ExceptionConstructors};
+    use std::mem::{align_of, size_of};
+
+    /// The constructor table is consumed by Rust as `&'static ExceptionConstructors` but produced by
+    /// C# as a flat sequence of function pointers written into a single `NativeMemory` allocation.
+    /// That only works if the struct is exactly a packed array of pointers: no padding, no
+    /// non-pointer field, and declaration order matching C#'s (which is alphabetical by field name).
+    ///
+    /// This checks the Rust half in isolation, so a bad edit fails in `cargo test` without needing
+    /// the managed suite. `AbiLayoutTests` on the C# side then checks the two halves against each
+    /// other field by field.
+    #[test]
+    fn exception_constructors_table_is_tightly_packed_pointer_array() {
+        let ptr_size = size_of::<usize>();
+        let field_count = CONSTRUCTOR_ABI_FIELDS.len();
+
+        assert_eq!(
+            size_of::<ExceptionConstructors>(),
+            field_count * ptr_size,
+            "ExceptionConstructors must be a tightly packed array of function pointers"
+        );
+        assert_eq!(align_of::<ExceptionConstructors>(), align_of::<usize>());
+
+        for (index, field) in CONSTRUCTOR_ABI_FIELDS.iter().enumerate() {
+            assert_eq!(
+                field.offset,
+                index * ptr_size,
+                "constructor field `{}` (#{index}) is not at the expected pointer-strided offset",
+                field.name
+            );
+        }
+    }
+
+    /// C# indexes the table by field order, and the agreed order is alphabetical. A
+    /// misalphabetised insertion is the easiest way to silently pair a Rust slot with the wrong
+    /// managed constructor, so reject it here rather than discovering it as a wrong exception type.
+    #[test]
+    fn exception_constructors_are_declared_alphabetically() {
+        let names: Vec<&str> = CONSTRUCTOR_ABI_FIELDS.iter().map(|f| f.name).collect();
+        let mut sorted = names.clone();
+        sorted.sort_unstable();
+        assert_eq!(
+            names, sorted,
+            "ExceptionConstructors fields must be declared in alphabetical order"
+        );
     }
 }

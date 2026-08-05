@@ -216,15 +216,143 @@ build-rust-testing:
 	cd rust; \
 	cargo build --features integration_testing;
 
+# Rust unit tests and doctests. The doctests matter as much as the unit tests here: the
+# `compile_fail` ones in rust/src/ffi.rs are what prove the borrow-checker invariants the whole
+# pointer design rests on, and `cargo test --lib` alone silently skips them.
+.PHONY: test-rust
+test-rust:
+	cd rust; \
+	cargo test --all-features --lib; \
+	cargo test --all-features --doc;
+
+# Rejects a shippable build that exports the test-only FFI entry points. They are feature-gated, so
+# this should never fire - but the whole point of the gate is that nothing outside a test build can
+# reach them, and that is worth checking rather than assuming.
+.PHONY: check-no-test-exports
+check-no-test-exports: build-rust
+	@if nm -D --defined-only rust/target/debug/libcsharp_wrapper.so | grep -q ' T ffi_test_'; then \
+		echo "FAIL: the default build exports test-only symbols:"; \
+		nm -D --defined-only rust/target/debug/libcsharp_wrapper.so | grep ' T ffi_test_'; \
+		exit 1; \
+	fi; \
+	echo "OK: no ffi_test_* symbols in the default build"
+
+#
+# --- Sanitizers -------------------------------------------------------------------------------
+#
+# All of this needs the nightly toolchain:
+#   rustup toolchain install nightly --component rust-src,miri
+#
+ASAN_TARGET ?= x86_64-unknown-linux-gnu
+# A separate target dir. The sanitizer build uses different RUSTFLAGS, so sharing `target/` with the
+# ordinary build would invalidate the whole cache every time you switch between them.
+ASAN_TARGET_DIR ?= target/asan
+# `--cfg scylla_unstable` has to be repeated here: setting the RUSTFLAGS environment variable
+# *replaces* build.rustflags from rust/.cargo/config.toml rather than appending to it, so omitting it
+# silently drops the scylla driver's unstable API surface and the build fails confusingly.
+ASAN_RUSTFLAGS ?= --cfg scylla_unstable -Zsanitizer=address
+# detect_stack_use_after_return catches an FFIStr or FFISlice returned while borrowing a Rust stack
+# local, which is a plausible mistake given how much of this layer hands out borrowed pointers.
+ASAN_OPTS ?= detect_leaks=1:detect_stack_use_after_return=1:detect_stack_use_after_scope=1:strict_string_checks=1
+
+# Runs the Rust unit tests under AddressSanitizer: use-after-free, double free, buffer overflow, and
+# (via LeakSanitizer) leaked Rust allocations. This is a clean process with no CLR in it, so leak
+# detection is usable here in a way it is not in the managed test run - see FFI_TESTING.md.
+#
+# Note that -Zbuild-std is deliberately *not* used. It would also instrument std's own loads and
+# stores, but it currently fails on this crate: `[profile.dev] panic = "abort"` makes cargo build
+# `core` twice with incompatible settings ("duplicate lang item in crate core"). Heap checks and leak
+# detection work regardless, because the allocator is intercepted either way; what is lost is
+# instrumentation of accesses *inside* std, and better stack traces through it.
+.PHONY: test-rust-asan
+test-rust-asan:
+	cd rust; \
+	CARGO_TARGET_DIR=${ASAN_TARGET_DIR} \
+	RUSTFLAGS="${ASAN_RUSTFLAGS}" \
+	ASAN_OPTIONS=${ASAN_OPTS} \
+	cargo +nightly test --target ${ASAN_TARGET} --all-features --lib;
+
+# Proves the sanitizer is actually armed, by running two tests that contain real defects and
+# requiring ASAN to report them (see rust/src/ffi.rs `asan_selftest`).
+#
+# Without this, `test-rust-asan` passing is indistinguishable from the sanitizer not being enabled -
+# which is not hypothetical: it depends on RUSTFLAGS reaching the right compilation units, and those
+# flags have been silently dropped from this Makefile before.
+.PHONY: test-rust-asan-selftest
+test-rust-asan-selftest:
+	@cd rust; \
+	run() { \
+		CARGO_TARGET_DIR=${ASAN_TARGET_DIR} RUSTFLAGS="${ASAN_RUSTFLAGS}" ASAN_OPTIONS=detect_leaks=1 \
+		cargo +nightly test --target ${ASAN_TARGET} --all-features --lib -- \
+			--ignored --test-threads=1 "$$1" 2>&1 || true; \
+	}; \
+	uaf=$$(run asan_selftest::deliberate_use_after_free); \
+	echo "$$uaf" | grep -q 'AddressSanitizer: heap-use-after-free' || { \
+		echo "FAIL: ASAN did not report the deliberate use-after-free - the sanitizer is not armed."; \
+		echo "$$uaf" | tail -30; exit 1; }; \
+	leak=$$(run asan_selftest::deliberate_leak); \
+	echo "$$leak" | grep -q 'LeakSanitizer: detected memory leaks' || { \
+		echo "FAIL: LeakSanitizer did not report the deliberate leak."; \
+		echo "$$leak" | tail -30; exit 1; }; \
+	echo "OK: AddressSanitizer and LeakSanitizer are both armed"
+
+# Miri catches what ASAN structurally cannot: aliasing and pointer-provenance violations, such as
+# producing a &mut through BridgedPtr while a shared borrow is live, or Box::from_raw on a pointer
+# that did not come from Box. It cannot run the tokio or dlopen paths, so it is scoped to the pure
+# FFI abstractions.
+.PHONY: test-rust-miri
+test-rust-miri:
+	cd rust; \
+	cargo +nightly miri test --all-features --lib;
+
+# Builds the cdylib with AddressSanitizer, for loading into the .NET test host.
+#
+# This is the harder half of the story and is documented in FFI_TESTING.md. In short: rustc
+# ships only the *static* sanitizer runtime, which is not supported inside a DSO dlopen'd by an
+# uninstrumented host, so the cdylib has to be linked against the *shared* runtime and that runtime
+# has to be LD_PRELOADed ahead of the CLR. Both need a clang whose LLVM major version matches
+# rustc's. `test-unit-asan` does the preloading; this target only produces the library.
 .PHONY: build-rust-asan
 build-rust-asan:
 	cd rust; \
-	RUSTFLAGS="\
-		${RUSTFLAGS} \
-		-Zsanitizer=address \
-		-C link-arg=-Wl,--whole-archive \
-		-C link-arg=/usr/lib/clang/20/lib/x86_64-redhat-linux-gnu/libclang_rt.asan_static.a" \
-	cargo +nightly build -Zbuild-std --target x86_64-unknown-linux-gnu;
+	CARGO_TARGET_DIR=${ASAN_TARGET_DIR} \
+	RUSTFLAGS="${ASAN_RUSTFLAGS} -Zexternal-clangrt -C link-arg=-shared-libasan" \
+	cargo +nightly build --features integration_testing --target ${ASAN_TARGET};
+
+# Runs the managed unit tests with the sanitized cdylib loaded into the .NET host.
+#
+# ASAN_OPTIONS here is not optional. CoreCLR installs its own SIGSEGV handler for null-reference
+# checks and GC write barriers, so ASAN must not claim those signals or the runtime dies at startup.
+# Leak detection is off for the same kind of reason: the CLR never frees its JIT arenas, type loader
+# or GC segments by design, so LeakSanitizer would report thousands of intentional "leaks". Leaks are
+# covered by `test-rust-asan` (a clean process) and by the managed handle accounting instead.
+ASAN_SO ?= $(shell clang -print-file-name=libclang_rt.asan-x86_64.so 2>/dev/null)
+.PHONY: test-unit-asan
+test-unit-asan: .use-development-snk build-rust-asan
+	@if [ ! -f "${ASAN_SO}" ]; then \
+		echo "Could not locate the shared ASAN runtime (got '${ASAN_SO}')."; \
+		echo "Install a clang matching rustc's LLVM version, or set ASAN_SO explicitly."; \
+		exit 1; \
+	fi
+	cp rust/${ASAN_TARGET_DIR}/${ASAN_TARGET}/debug/libcsharp_wrapper.so rust/target/debug/
+	LD_PRELOAD="${ASAN_SO}" \
+	ASAN_OPTIONS=detect_leaks=0:handle_segv=0:handle_sigbus=0:handle_sigfpe=0:handle_abort=0:abort_on_error=1 \
+	dotnet test $(TEST_TARGET_OPTIONS) src/Cassandra.Tests/Cassandra.Tests.csproj --property:BuildRust=false
+
+# Re-runs the managed unit tests under a deliberately hostile GC: a tiny gen0 forces frequent
+# compacting collections, and disabling tiered compilation stops the JIT from extending local
+# lifetimes and masking a rooting mistake. Any managed buffer handed to Rust without being pinned is
+# far more likely to be caught here than in the ordinary run.
+#
+# GcMovementTests probes this directly for one buffer; this target applies the same pressure to every
+# test in the suite.
+.PHONY: test-unit-gcstress
+test-unit-gcstress: .use-development-snk build-rust-testing
+	DOTNET_gcServer=0 \
+	DOTNET_gcConcurrent=0 \
+	DOTNET_GCgen0size=8000 \
+	DOTNET_TieredCompilation=0 \
+	dotnet test $(TEST_TARGET_OPTIONS) src/Cassandra.Tests/Cassandra.Tests.csproj --property:BuildRust=false
 
 .PHONY: run-wrapper-example
 run-wrapper-example:
